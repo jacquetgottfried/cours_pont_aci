@@ -16,7 +16,8 @@ Le calcul matriciel des déplacements est utilisé.
  - LIME détaille le calcul de la ligne d'influence pour le moment interne en E
 ![alt text](./images/image-3.png)
 - LIMF ligne d'influence moment en F, (milieu du seguement de poutre AB)
-![alt text](./images/image-7.png)
+![alt text](./images/image_resikq.png)
+
 - LIVE détaille le calcul de la ligne d'influence pour l'éffort tranchant en E
 ![alt text](./images/image-8.png)
 -LIVF, ligne d'influence effort tranchant au point F (milieu de la portion de poutre (AB))
