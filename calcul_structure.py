@@ -16,7 +16,7 @@ def quantite_eil3(E, I, L):
     return (E*I)/(L*L*L)
 
 def matrice_elementaire(E, I, A, L):
-    eal =  quantite_eal(E, A, L)
+    eal = quantite_eal(E, A, L)
     eil = quantite_eil(E, I, L)
     eil2 = quantite_eil2(E, I, L)
     eil3 = quantite_eil3(E, I, L)
@@ -88,3 +88,20 @@ def assemblage_matrice_rigidite(LM, element, K_global, mat_elem_global):
         temp_i = temp_i + 1
     return K_global
 
+def assemblage_vecteur_nodal(LM, element, P_global, P_global_element):
+    counter  = 0
+    ddl = list(LM[:,element])
+    for i in range(6):
+        if ddl[i]!=0:
+            P_global[ddl[i]-1] += P_global_element[counter]
+        counter += 1
+    return P_global
+
+def obtention_du_deplacement_local(LM, element, U):
+    indice = list(LM[:,element])
+    u = np.zeros((6,1))
+
+    for i in range(6):
+        if indice[i] != 0:
+            u[i] = U[indice[i]-1]
+    return u
