@@ -1,0 +1,14 @@
+# Moteur de calcul
+numpy
+
+# Backend API
+fastapi
+uvicorn[standard]
+pydantic>=2
+
+# Notebooks (existant)
+matplotlib
+
+# Tests
+pytest
+httpx  # requis par fastapi.testclient

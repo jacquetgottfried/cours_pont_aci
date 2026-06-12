@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lignes d'influence — poutre continue</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+  <header>
+    <h1>Lignes d'influence — poutre continue</h1>
+    <p class="sub">Méthode de Müller-Breslau · méthode matricielle des déplacements</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <form id="form">
+        <label>
+          Travées (m, séparées par des virgules)
+          <input id="spans" type="text" value="15, 10, 15" />
+        </label>
+
+        <label>
+          Appuis explicites (m, optionnel)
+          <input id="supports" type="text" placeholder="déduits des travées" />
+        </label>
+
+        <label>
+          Grandeur
+          <select id="quantity">
+            <option value="R">Réaction d'appui (R)</option>
+            <option value="M">Moment fléchissant (M)</option>
+            <option value="V">Effort tranchant (V)</option>
+          </select>
+        </label>
+
+        <label>
+          Position de la grandeur x (m)
+          <input id="target_x" type="number" value="0" step="any" />
+        </label>
+
+        <label>
+          Discrétisation dx (m)
+          <input id="dx" type="number" value="1" min="0.05" step="any" />
+        </label>
+
+        <label>
+          URL de l'API
+          <input id="api" type="text" value="http://127.0.0.1:8000" />
+        </label>
+
+        <button type="submit">Calculer</button>
+        <button type="button" id="export" disabled>Exporter CSV</button>
+      </form>
+      <p id="error" class="error"></p>
+      <p id="info" class="info"></p>
+    </section>
+
+    <section class="panel chart-panel">
+      <canvas id="chart"></canvas>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
