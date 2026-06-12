@@ -2,6 +2,46 @@
 Nous présentons le calcul de la ligne d'influence utilisant la méthode du Muller Breslaut.
 Le calcul matriciel des déplacements est utilisé.
 
+## Application (moteur + API + interface web)
+
+Le calcul est désormais disponible comme **moteur générique paramétrable**, exposé par une
+**API** et une **interface web** légère (les notebooks restent à but pédagogique).
+
+### Installation
+```bash
+pip install -r requirements.txt
+```
+
+### Utilisation directe (Python)
+```python
+from engine import compute_influence_line
+res = compute_influence_line(spans=[15, 10, 15], quantity="R", target_x=0, dx=1.0)
+# res["x"], res["y"], res["y_nodes"], res["normalization"], res["meta"]
+```
+`quantity` : `"R"` (réaction), `"M"` (moment), `"V"` (effort tranchant). `target_x` doit
+tomber sur un nœud (et être un appui pour `"R"`).
+
+### Backend
+```bash
+uvicorn backend.main:app --reload
+```
+Documentation interactive : http://127.0.0.1:8000/docs · endpoint `POST /influence-line`.
+
+### Frontend
+Ouvrir `frontend/index.html` dans un navigateur (ou `python -m http.server` depuis
+`frontend/`), saisir la poutre et la grandeur, puis tracer la ligne d'influence.
+
+### Tests
+```bash
+pytest tests/
+```
+
+> ⚠️ Les CSV de `resultats/` issus des anciens notebooks sont en partie **erronés** (matrices
+> `LM` saisies à la main). Le moteur générique corrige ces erreurs ; seul `LIVE` était correct.
+
+---
+
+
 Les notes de calcul sont visible dans : 
 - LIRA détaille le calcul de la ligne d'influence pour la réaction d'appui A. Voir fichier [LIRA.ipynb](LIRA.ipynb): 
 
