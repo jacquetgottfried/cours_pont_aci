@@ -18,9 +18,19 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from engine import compute_influence_line  # noqa: E402
+from engine import (  # noqa: E402
+    axle_layout,
+    compute_influence_line,
+    sweep_effect,
+    vehicle_catalog,
+)
 
-from .schemas import InfluenceLineRequest, InfluenceLineResponse  # noqa: E402
+from .schemas import (  # noqa: E402
+    InfluenceLineRequest,
+    InfluenceLineResponse,
+    VehicleEnvelopeRequest,
+    VehicleEnvelopeResponse,
+)
 
 app = FastAPI(
     title="Lignes d'influence — poutre continue",
@@ -63,3 +73,32 @@ def influence_line(req: InfluenceLineRequest):
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
+
+
+@app.get("/vehicles")
+def vehicles():
+    """Catalogue HL-93 (essieux, charges, espacements) — source unique de vérité."""
+    return vehicle_catalog()
+
+
+@app.post("/vehicle-envelope", response_model=VehicleEnvelopeResponse)
+def vehicle_envelope(req: VehicleEnvelopeRequest):
+    """Balade le véhicule HL-93 sur la poutre et renvoie l'effet vs position + max.
+
+    L'effet est en kN (réaction, effort tranchant) ou kN·m (moment).
+    """
+    try:
+        li = compute_influence_line(
+            spans=req.spans,
+            quantity=req.quantity,
+            target_x=req.target_x,
+            dx=req.dx,
+            supports=req.supports,
+        )
+        axles = axle_layout(req.vehicle, rear_spacing=req.rear_spacing)
+        env = sweep_effect(li["x"], li["y"], axles, impact=req.impact)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    env["unit"] = "kN·m" if req.quantity == "M" else "kN"
+    return env

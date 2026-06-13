@@ -18,6 +18,7 @@ calcul_structure.py   # briques FE bas niveau (matrice élémentaire, assemblage
 engine/
   model_builder.py    # construit XY, numérotation DDL et LM PROGRAMMATIQUEMENT (+ releases Müller-Breslau)
   influence_line.py   # compute_influence_line(...) : fonction générique unique
+  vehicle_loads.py    # charges mobiles HL-93 (AASHTO LRFD, SI) : effet, balayage, max, IM
 backend/
   schemas.py          # modèles Pydantic (validation entrées/sorties)
   main.py             # app FastAPI : POST /influence-line, GET /health

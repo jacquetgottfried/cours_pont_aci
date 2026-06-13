@@ -31,6 +31,17 @@ Documentation interactive : http://127.0.0.1:8000/docs · endpoint `POST /influe
 Ouvrir `frontend/index.html` dans un navigateur (ou `python -m http.server` depuis
 `frontend/`), saisir la poutre et la grandeur, puis tracer la ligne d'influence.
 
+Sous Windows, `run.bat` (à la racine) installe les dépendances au besoin, démarre le
+backend et ouvre le frontend automatiquement.
+
+### Charges mobiles HL-93 (AASHTO LRFD, SI)
+Une fois la ligne d'influence tracée, on peut balader un **véhicule de référence** :
+- **camion de calcul** (35 / 145 / 145 kN, espacement arrière réglable 4,3–9,0 m) ou
+  **tandem** (110 / 110 kN à 1,2 m), avec **majoration dynamique IM = 33 %** ;
+- les essieux sont **matérialisés par des flèches** à leur position AASHTO exacte ;
+- un curseur déplace le véhicule avec l'**effet résultant en direct** (kN ou kN·m) ;
+- le **balayage automatique** trouve la position la plus défavorable (effet maximal).
+
 ### Tests
 ```bash
 pytest tests/

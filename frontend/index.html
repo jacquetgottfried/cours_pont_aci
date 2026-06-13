@@ -45,6 +45,8 @@
           <input id="dx" type="number" value="1" min="0.05" step="any" />
         </label>
 
+        <p class="hint">Unités : SI (longueurs en m, charges en kN).</p>
+
         <label>
           URL de l'API
           <input id="api" type="text" value="http://127.0.0.1:8000" />
@@ -58,7 +60,46 @@
     </section>
 
     <section class="panel chart-panel">
-      <canvas id="chart"></canvas>
+      <div class="chart-box"><canvas id="chart"></canvas></div>
+    </section>
+
+    <section class="panel" id="vehicle-panel" hidden>
+      <h2>Véhicule de référence HL-93 (AASHTO LRFD)</h2>
+
+      <label>
+        Type de véhicule
+        <select id="vehicle">
+          <option value="truck">Camion de calcul (35 / 145 / 145 kN)</option>
+          <option value="tandem">Tandem (110 / 110 kN)</option>
+        </select>
+      </label>
+
+      <label id="rear-spacing-label">
+        Espacement des essieux arrière : <span id="rear-spacing-val">4.3</span> m
+        <input id="rear-spacing" type="range" min="4.3" max="9.0" step="0.1" value="4.3" />
+      </label>
+
+      <label class="check">
+        <input id="impact" type="checkbox" checked />
+        Majoration dynamique IM = 33 %
+      </label>
+
+      <label>
+        Position de l'essieu de tête : <span id="lead-val">0.0</span> m
+        <input id="lead-pos" type="range" min="0" max="40" step="0.1" value="0" />
+      </label>
+
+      <div class="effect-readout">
+        Effet à cette position : <strong id="effect-val">—</strong>
+      </div>
+
+      <button type="button" id="sweep">Balayage automatique → effet maximal</button>
+      <div class="effect-readout max" id="max-readout" hidden></div>
+    </section>
+
+    <section class="panel chart-panel" id="envelope-panel" hidden>
+      <h2>Effet en fonction de la position du véhicule</h2>
+      <div class="chart-box"><canvas id="envelope-chart"></canvas></div>
     </section>
   </main>
 

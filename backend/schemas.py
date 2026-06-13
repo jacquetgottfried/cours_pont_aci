@@ -86,3 +86,53 @@ class InfluenceLineResponse(BaseModel):
         ..., description="Valeur de normalisation (Maxwell-Betti)."
     )
     meta: InfluenceLineMeta
+
+
+# --------------------------------------------------------------------------- #
+# Charges mobiles HL-93
+# --------------------------------------------------------------------------- #
+VEHICLES = ("truck", "tandem")
+
+
+class VehicleEnvelopeRequest(InfluenceLineRequest):
+    """Ligne d'influence + véhicule HL-93 à balader dessus."""
+
+    vehicle: str = Field(..., description="'truck' (camion) ou 'tandem'.")
+    rear_spacing: float = Field(
+        4.3,
+        ge=4.3,
+        le=9.0,
+        description="Espacement des essieux arrière du camion (m), 4.3–9.0.",
+    )
+    impact: bool = Field(
+        True, description="Appliquer la majoration dynamique IM=33 %."
+    )
+
+    @field_validator("vehicle")
+    @classmethod
+    def _check_vehicle(cls, v: str) -> str:
+        if v not in VEHICLES:
+            raise ValueError(f"vehicle doit être dans {VEHICLES}, reçu {v!r}.")
+        return v
+
+
+class AxlePosition(BaseModel):
+    x: float
+    load: float
+
+
+class EnvelopeMax(BaseModel):
+    value: float
+    lead_pos: float
+    axle_positions: List[AxlePosition]
+
+
+class VehicleEnvelopeResponse(BaseModel):
+    """Effet de la charge mobile en fonction de la position de l'essieu de tête."""
+
+    positions: List[float] = Field(..., description="Position de l'essieu de tête (m).")
+    effects: List[float] = Field(
+        ..., description="Effet résultant (kN ou kN·m selon la grandeur)."
+    )
+    max: EnvelopeMax
+    unit: str = Field(..., description="Unité de l'effet : 'kN' ou 'kN·m'.")

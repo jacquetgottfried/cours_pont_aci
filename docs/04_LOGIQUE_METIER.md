@@ -28,3 +28,23 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
 - Élément portique 2D, 3 DDL/nœud `[Ux, Uy, Theta]`.
 - E, I, A uniformes ; sans effet sur la forme normalisée de la LI (défaut = 1).
 - Chaque appui et chaque point étudié doit coïncider avec un nœud (`dx` divise les positions).
+
+## R5 — Charges mobiles HL-93 (AASHTO LRFD, unités SI)
+- **Camion de calcul** : essieux 35 / 145 / 145 kN ; espacement avant→1er arrière
+  = 4.3 m ; espacement entre les deux essieux arrière variable de 4.3 m à 9.0 m
+  (choisi pour maximiser l'effet ; 4.3 m gouverne souvent le moment positif).
+- **Tandem** : 2 essieux de 110 kN espacés de 1.2 m.
+- **Majoration dynamique (impact)** : IM = 33 % appliquée au camion/tandem (facteur 1.33).
+- **Charge de voie répartie (9.3 kN/m) : non incluse** (choix projet, état actuel).
+- **Effet d'une charge mobile** sur une ligne d'influence : `effet = (1+IM)·Σ P_i·η(x_i)`,
+  où η est l'ordonnée de la LI interpolée à l'abscisse de l'essieu i.
+  - LI de réaction / effort tranchant : η sans dimension → effet en **kN**.
+  - LI de moment : η a la dimension d'une longueur → effet en **kN·m**.
+  - Essieux hors de la poutre : non comptabilisés.
+  - À l'aplomb d'une coupure (LI de V discontinue) : on retient le côté défavorable.
+
+## R6 — Unités
+- Le moteur est **adimensionnel/agnostique** : on lui passe la géométrie dans une unité
+  de longueur (m en SI) et il renvoie les ordonnées dans cette même unité. Seule la
+  **longueur** a un effet réel sur une ligne d'influence pure ; la force (kN) n'intervient
+  qu'avec les charges mobiles (R5).

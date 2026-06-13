@@ -77,5 +77,44 @@ button[type="button"] { background: #475569; }
 
 .error { color: #b91c1c; font-size: 0.85rem; min-height: 1rem; }
 .info { color: var(--muted); font-size: 0.8rem; }
+.hint { color: var(--muted); font-size: 0.78rem; margin: 0; }
 
-.chart-panel { min-height: 420px; }
+/* Conteneur à hauteur FIXE : indispensable pour éviter que Chart.js
+   (responsive + maintainAspectRatio:false) ne grossisse à l'infini. */
+.chart-box {
+  position: relative;
+  width: 100%;
+  height: 380px;
+}
+.chart-box canvas {
+  display: block;
+}
+
+#vehicle-panel h2,
+#envelope-panel h2 {
+  font-size: 1rem;
+  margin: 0 0 0.8rem;
+}
+
+#vehicle-panel label { margin-bottom: 0.8rem; }
+#vehicle-panel label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text);
+}
+#vehicle-panel input[type="range"] { padding: 0; }
+
+.effect-readout {
+  margin: 0.6rem 0;
+  padding: 0.6rem;
+  border-radius: 6px;
+  background: #eff6ff;
+  font-size: 0.95rem;
+}
+.effect-readout strong { color: var(--accent); font-size: 1.1rem; }
+.effect-readout.max {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  white-space: pre-line;
+}

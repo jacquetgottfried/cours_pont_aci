@@ -6,5 +6,21 @@ du modèle. Réutilise les briques bas niveau de `calcul_structure.py` sans les 
 
 from .influence_line import compute_influence_line
 from .model_builder import build_model, BeamModel
+from .vehicle_loads import (
+    axle_layout,
+    load_effect,
+    sweep_effect,
+    vehicle_catalog,
+    IM,
+)
 
-__all__ = ["compute_influence_line", "build_model", "BeamModel"]
+__all__ = [
+    "compute_influence_line",
+    "build_model",
+    "BeamModel",
+    "axle_layout",
+    "load_effect",
+    "sweep_effect",
+    "vehicle_catalog",
+    "IM",
+]

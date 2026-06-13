@@ -11,6 +11,8 @@ Base : `http://127.0.0.1:8000` · Documentation interactive : `/docs`.
 - Payload : aucun.
 - Réponse 200 : `{"status": "ok"}`
 
+Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-envelope`.
+
 ## POST /influence-line — calcule une ligne d'influence
 - Payload (JSON) :
   ```json
@@ -39,3 +41,40 @@ Base : `http://127.0.0.1:8000` · Documentation interactive : `/docs`.
   - `400` — erreur métier (réaction hors appui, point hors nœud, dx non multiple,
     structure instable/mécanisme). `detail` contient le message.
   - `422` — validation Pydantic (quantité invalide, travée ≤ 0, champ manquant).
+
+## GET /vehicles — catalogue HL-93 (AASHTO LRFD, SI)
+- Payload : aucun.
+- Réponse 200 : essieux et espacements (source unique de vérité pour le frontend).
+  ```json
+  {
+    "im": 0.33,
+    "truck":  {"label":"Camion de calcul (HL-93)",
+               "axles":[{"offset":0.0,"load":35.0},{"offset":4.3,"load":145.0},
+                        {"offset":8.6,"load":145.0}],
+               "rear_spacing":{"min":4.3,"max":9.0,"default":4.3}},
+    "tandem": {"label":"Tandem de calcul (HL-93)",
+               "axles":[{"offset":0.0,"load":110.0},{"offset":1.2,"load":110.0}],
+               "rear_spacing":null}
+  }
+  ```
+
+## POST /vehicle-envelope — balaye un véhicule HL-93 sur la ligne d'influence
+- Payload (JSON) : champs de `/influence-line` + :
+  ```json
+  {
+    "vehicle": "truck",      // "truck" | "tandem", requis
+    "rear_spacing": 4.3,     // espacement arrière camion (m), 4.3–9.0, défaut 4.3
+    "impact": true           // majoration dynamique IM=33 %, défaut true
+  }
+  ```
+- Réponse 200 :
+  ```json
+  {
+    "positions": [...],   // abscisse de l'essieu de tête (m)
+    "effects": [...],     // effet résultant à chaque position
+    "max": {"value": 407.68, "lead_pos": 15.70,
+            "axle_positions": [{"x":15.7,"load":35.0}, ...]},
+    "unit": "kN·m"        // "kN" (R, V) ou "kN·m" (M)
+  }
+  ```
+- Erreurs : `400` (idem métier), `422` (véhicule invalide, rear_spacing hors 4.3–9.0).
