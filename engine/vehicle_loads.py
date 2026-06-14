@@ -1,14 +1,19 @@
 """Charges mobiles HL-93 (AASHTO LRFD) appliquées à une ligne d'influence.
 
-Unités : Système International (longueurs en m, charges en kN, effet en kN ou kN·m
-selon la grandeur de la ligne d'influence).
+Deux systèmes d'unités sont supportés via le paramètre `unit_system` :
+  - "SI" : longueurs en m, charges en kN, effet en kN ou kN·m.
+  - "US" : longueurs en ft, charges en kip, effet en kip ou kip·ft.
 
-Définitions HL-93 (valeurs SI de l'AASHTO LRFD) :
-  - Camion de calcul (design truck) : essieux 35 / 145 / 145 kN.
-      espacement avant→1er arrière = 4.3 m ;
-      espacement entre les deux essieux arrière variable de 4.3 m à 9.0 m.
-  - Tandem de calcul (design tandem) : 2 essieux de 110 kN espacés de 1.2 m.
-  - Coefficient de majoration dynamique (impact) IM = 33 % sur camion/tandem.
+IMPORTANT — l'AASHTO LRFD définit le HL-93 dans les DEUX systèmes avec des valeurs
+réglementaires DISTINCTES (pas de simples conversions arrondies). On stocke donc les
+deux jeux officiels dans `HL93` ; on ne convertit JAMAIS numériquement un véhicule.
+  - Camion de calcul (design truck) :
+      SI  : essieux 35 / 145 / 145 kN ; tête→1er arrière = 4.3 m ; arrière 4.3→9.0 m.
+      US  : essieux 8 / 32 / 32 kip   ; tête→1er arrière = 14 ft  ; arrière 14→30 ft.
+  - Tandem de calcul (design tandem) :
+      SI  : 2 essieux de 110 kN espacés de 1.2 m.
+      US  : 2 essieux de 25 kip espacés de 4.0 ft.
+  - Coefficient de majoration dynamique (impact) IM = 33 % (sans dimension, commun).
 La charge de voie répartie (9.3 kN/m) n'est PAS incluse ici (choix utilisateur).
 
 L'« effet » d'une charge mobile sur une ligne d'influence est, par définition :
@@ -23,16 +28,73 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Coefficient de majoration dynamique (dynamic load allowance), état limite usuel.
+# Coefficient de majoration dynamique (dynamic load allowance), commun SI/US.
 IM = 0.33
-
-# Espacement arrière du camion : bornes réglementaires (m).
-TRUCK_REAR_MIN = 4.3
-TRUCK_REAR_MAX = 9.0
 
 TRUCK = "truck"
 TANDEM = "tandem"
 VEHICLES = (TRUCK, TANDEM)
+
+SI = "SI"
+US = "US"
+UNIT_SYSTEMS = (SI, US)
+
+# Jeux de valeurs HL-93 OFFICIELS de l'AASHTO LRFD, par système d'unités.
+# Ce sont des valeurs réglementaires distinctes : on ne les convertit jamais.
+HL93 = {
+    SI: {
+        "length_unit": "m",
+        "force_unit": "kN",
+        "truck": {
+            "loads": (35.0, 145.0, 145.0),  # essieux tête, arrière 1, arrière 2
+            "front_rear": 4.3,              # tête -> 1er essieu arrière (m)
+            "rear_min": 4.3,                # arrière variable, min (m)
+            "rear_max": 9.0,                # arrière variable, max (m)
+        },
+        "tandem": {"loads": (110.0, 110.0), "spacing": 1.2},
+    },
+    US: {
+        "length_unit": "ft",
+        "force_unit": "kip",
+        "truck": {
+            "loads": (8.0, 32.0, 32.0),
+            "front_rear": 14.0,             # ft
+            "rear_min": 14.0,               # ft
+            "rear_max": 30.0,               # ft
+        },
+        "tandem": {"loads": (25.0, 25.0), "spacing": 4.0},
+    },
+}
+
+# Bornes SI conservées pour compatibilité (anciens imports). Source : HL93[SI].
+TRUCK_REAR_MIN = HL93[SI]["truck"]["rear_min"]
+TRUCK_REAR_MAX = HL93[SI]["truck"]["rear_max"]
+
+
+def _system(unit_system):
+    """Renvoie le bloc de constantes HL-93 du système demandé (ou lève)."""
+    if unit_system not in HL93:
+        raise ValueError(
+            f"Système d'unités inconnu : {unit_system!r} (attendu {UNIT_SYSTEMS})."
+        )
+    return HL93[unit_system]
+
+
+def truck_rear_bounds(unit_system=SI):
+    """Bornes (min, max) de l'espacement arrière du camion pour ce système."""
+    t = _system(unit_system)["truck"]
+    return t["rear_min"], t["rear_max"]
+
+
+def effect_unit(unit_system, quantity):
+    """Unité de l'effet d'une charge mobile selon (système, grandeur).
+
+    - réaction (R) / effort tranchant (V) : force seule (η sans dimension).
+    - moment (M) : force × longueur (η a la dimension d'une longueur).
+    """
+    s = _system(unit_system)
+    fu, lu = s["force_unit"], s["length_unit"]
+    return f"{fu}·{lu}" if quantity == "M" else fu
 
 
 @dataclass
@@ -41,50 +103,67 @@ class Axle:
     load: float    # charge de l'essieu (kN)
 
 
-def axle_layout(vehicle: str, rear_spacing: float = TRUCK_REAR_MIN) -> list[Axle]:
-    """Disposition des essieux (offset depuis l'essieu de tête, charge) en SI.
+def axle_layout(
+    vehicle: str,
+    rear_spacing: float | None = None,
+    unit_system: str = SI,
+) -> list[Axle]:
+    """Disposition des essieux (offset depuis l'essieu de tête, charge).
 
-    Pour le camion, `rear_spacing` (4.3–9.0 m) est l'écart entre les deux essieux
-    arrière de 145 kN.
+    Les valeurs (charges, espacements) sont celles du système `unit_system`
+    ("SI" en kN/m, "US" en kip/ft). Pour le camion, `rear_spacing` est l'écart
+    entre les deux essieux arrière lourds ; `None` => minimum réglementaire du
+    système (4.3 m en SI, 14 ft en US).
     """
+    s = _system(unit_system)
     if vehicle == TRUCK:
-        if not (TRUCK_REAR_MIN - 1e-9 <= rear_spacing <= TRUCK_REAR_MAX + 1e-9):
+        t = s["truck"]
+        if rear_spacing is None:
+            rear_spacing = t["rear_min"]
+        rmin, rmax = t["rear_min"], t["rear_max"]
+        if not (rmin - 1e-9 <= rear_spacing <= rmax + 1e-9):
             raise ValueError(
                 f"L'espacement arrière du camion doit être entre "
-                f"{TRUCK_REAR_MIN} et {TRUCK_REAR_MAX} m (reçu {rear_spacing})."
+                f"{rmin} et {rmax} {s['length_unit']} (reçu {rear_spacing})."
             )
-        return [
-            Axle(0.0, 35.0),
-            Axle(4.3, 145.0),
-            Axle(4.3 + rear_spacing, 145.0),
-        ]
+        l0, l1, l2 = t["loads"]
+        fr = t["front_rear"]
+        return [Axle(0.0, l0), Axle(fr, l1), Axle(fr + rear_spacing, l2)]
     if vehicle == TANDEM:
-        return [Axle(0.0, 110.0), Axle(1.2, 110.0)]
+        t = s["tandem"]
+        l0, l1 = t["loads"]
+        return [Axle(0.0, l0), Axle(t["spacing"], l1)]
     raise ValueError(f"Véhicule inconnu : {vehicle!r} (attendu {VEHICLES}).")
 
 
-def vehicle_catalog() -> dict:
-    """Catalogue HL-93 exposé au frontend (source unique de vérité)."""
+def vehicle_catalog(unit_system: str = SI) -> dict:
+    """Catalogue HL-93 exposé au frontend (source unique de vérité).
+
+    Renvoie aussi `unit_system`, `force_unit` et `length_unit` pour que le
+    frontend affiche les libellés sans jamais coder d'unité en dur.
+    """
+    s = _system(unit_system)
+    t, tdm = s["truck"], s["tandem"]
+    fr, rmin, rmax = t["front_rear"], t["rear_min"], t["rear_max"]
     return {
+        "unit_system": unit_system,
         "im": IM,
+        "force_unit": s["force_unit"],
+        "length_unit": s["length_unit"],
         "truck": {
             "label": "Camion de calcul (HL-93)",
             "axles": [
-                {"offset": 0.0, "load": 35.0},
-                {"offset": 4.3, "load": 145.0},
-                {"offset": 8.6, "load": 145.0},
+                {"offset": 0.0, "load": t["loads"][0]},
+                {"offset": fr, "load": t["loads"][1]},
+                {"offset": fr + rmin, "load": t["loads"][2]},
             ],
-            "rear_spacing": {
-                "min": TRUCK_REAR_MIN,
-                "max": TRUCK_REAR_MAX,
-                "default": TRUCK_REAR_MIN,
-            },
+            "rear_spacing": {"min": rmin, "max": rmax, "default": rmin},
         },
         "tandem": {
             "label": "Tandem de calcul (HL-93)",
             "axles": [
-                {"offset": 0.0, "load": 110.0},
-                {"offset": 1.2, "load": 110.0},
+                {"offset": 0.0, "load": tdm["loads"][0]},
+                {"offset": tdm["spacing"], "load": tdm["loads"][1]},
             ],
             "rear_spacing": None,
         },
@@ -165,6 +244,22 @@ def _candidate_positions(x, axles, n_grid):
     return positions
 
 
+def _pack_extreme(x, axles, positions, effects, i):
+    """Décrit l'effet à l'indice i : valeur, position de tête, essieux sur la poutre."""
+    L = x[-1]
+    lead = positions[i]
+    axle_positions = [
+        {"x": lead + ax.offset, "load": ax.load}
+        for ax in axles
+        if -1e-9 <= lead + ax.offset <= L + 1e-9
+    ]
+    return {
+        "value": effects[i],
+        "lead_pos": lead,
+        "axle_positions": axle_positions,
+    }
+
+
 def sweep_effect(
     x: list[float],
     y: list[float],
@@ -174,27 +269,26 @@ def sweep_effect(
 ) -> dict:
     """Balaye le véhicule sur toute la poutre et calcule l'effet à chaque position.
 
-    Retourne {positions, effects, max:{value, lead_pos, axle_positions}}.
-    `positions` et `lead_pos` désignent l'abscisse de l'essieu de tête.
+    Retourne {positions, effects, max, min, governing} où :
+      - max       : effet le plus POSITIF rencontré ;
+      - min       : effet le plus NÉGATIF rencontré ;
+      - governing : celui des deux de plus grande valeur absolue (le plus défavorable).
+    Chacun est {value, lead_pos, axle_positions}. `positions`/`lead_pos` désignent
+    l'abscisse de l'essieu de tête.
     """
-    L = x[-1]
     positions = _candidate_positions(x, axles, n_grid)
     effects = [load_effect(x, y, p, axles, impact=impact) for p in positions]
 
-    # extremum en valeur absolue (position la plus défavorable).
-    i_max = max(range(len(effects)), key=lambda i: abs(effects[i]))
-    lead = positions[i_max]
-    axle_positions = [
-        {"x": lead + ax.offset, "load": ax.load}
-        for ax in axles
-        if -1e-9 <= lead + ax.offset <= L + 1e-9
-    ]
+    i_pos = max(range(len(effects)), key=lambda i: effects[i])
+    i_neg = min(range(len(effects)), key=lambda i: effects[i])
+    e_max = _pack_extreme(x, axles, positions, effects, i_pos)
+    e_min = _pack_extreme(x, axles, positions, effects, i_neg)
+    governing = e_max if abs(e_max["value"]) >= abs(e_min["value"]) else e_min
+
     return {
         "positions": positions,
         "effects": effects,
-        "max": {
-            "value": effects[i_max],
-            "lead_pos": lead,
-            "axle_positions": axle_positions,
-        },
+        "max": e_max,
+        "min": e_min,
+        "governing": governing,
     }

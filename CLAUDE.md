@@ -27,48 +27,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An educational structural-engineering project that computes **influence lines** (*lignes d'influence*) for a multi-span continuous beam (supports A, B, C) using the **Müller-Breslau method**, implemented through the **direct stiffness method** (2D frame finite elements). All narrative and comments are in French.
+An educational structural-engineering project that computes **influence lines** (*lignes d'influence*) for a multi-span continuous beam, plus the effect of **HL-93 moving loads** (AASHTO LRFD), using the **Müller-Breslau method** implemented through the **direct stiffness method** (2D frame finite elements). It is a 3-layer app: a Python/NumPy engine, a FastAPI backend, and a static HTML/JS frontend. All narrative, comments, and docstrings are in **French**.
 
-## Running
+The five [docs/](docs/) files are the **source of truth** and are `@`-imported at the top of this file — read them before changing behavior. `04_LOGIQUE_METIER.md` (business rules / invariants) and `05_DECISION_REJETEE.md` (rejected approaches) are authoritative: contradict them only after flagging it.
 
-There is no build, test, or lint tooling, and no dependency manifest. The code runs as Jupyter notebooks importing a small local Python module.
+## Commands
 
-- Dependencies (install manually): `numpy`, `matplotlib` (and stdlib `math`).
-- Each notebook is self-contained: open it and run all cells top to bottom. The last cell writes results to `./resultats/<NAME>_resultats.csv` via `np.savetxt`.
-- Notebooks start with `from calcul_structure import *`, so edits to [calcul_structure.py](calcul_structure.py) require restarting the kernel (or re-running the import cell) to take effect.
+- Install deps: `pip install -r requirements.txt`
+- Run the API: `uvicorn backend.main:app --reload` (docs at http://127.0.0.1:8000/docs)
+- Full app on Windows: `run.bat` (installs deps if needed, starts the API in a new window, opens the frontend)
+- Frontend: open [frontend/index.html](frontend/index.html) directly in a browser (no build step; Chart.js loaded from CDN). It calls the API base shown in its form field (default `http://127.0.0.1:8000`).
+- All tests: `pytest tests/`
+- One test: `pytest tests/test_influence_line.py::test_reactions_somme_egale_un`
 
-## Core library
+## Architecture (the big picture)
 
-[calcul_structure.py](calcul_structure.py) is the entire FE engine. Key pieces:
+Data flow: **frontend form → `POST /influence-line` (or `/vehicle-envelope`) → engine → `{x, y, meta}` JSON → Chart.js**.
 
-- `matrice_elementaire(E, I, A, L)` — 6×6 elementary stiffness matrix of a 2D frame element (axial + Euler-Bernoulli bending), DOF order per node `[Ux, Uy, Theta]`.
-- `rotation_matrice(theta)` — element-to-global rotation; `theta=0` for the horizontal beams used throughout.
-- `assemblage_matrice_rigidite(LM, element, K_global, mat_elem_global)` — adds one element's contribution into the global stiffness matrix using the `LM` connectivity map.
-- `assemblage_vecteur_nodal(...)` / `obtention_du_deplacement_local(...)` — assemble the global nodal force vector and extract local element displacements.
+- [engine/model_builder.py](engine/model_builder.py) — `build_model(spans, quantity, target_x, dx, supports)` generates node coordinates, DOF numbering, and the `LM` connectivity matrix **programmatically**, and inserts the Müller-Breslau **release** for the requested quantity. This is the structuring fix of the project: the notebooks' hand-written `LM` matrices were buggy and non-parametric (see `05` / D2).
+- [engine/influence_line.py](engine/influence_line.py) — `compute_influence_line(...)`, the single generic function that replaces all 12 notebooks. It assembles `K` from `model.LM`, applies the unit release load, solves `K·U = P`, normalizes (Maxwell-Betti), and reconstructs the nodal ordinates.
+- [engine/vehicle_loads.py](engine/vehicle_loads.py) — HL-93 truck/tandem catalog, `load_effect`, and `sweep_effect` (slides the vehicle and returns max / min / governing effect).
+- [calcul_structure.py](calcul_structure.py) (root) — low-level FE bricks (`matrice_elementaire`, `rotation_matrice`, `assemblage_matrice_rigidite`, …), **reused unmodified** by the engine. [utils.py](utils.py) is only a matrix pretty-printer.
+- [backend/main.py](backend/main.py) — thin HTTP adapter over the engine; maps engine `ValueError`/`RuntimeError` → HTTP 400, Pydantic validation → 422. Schemas in [backend/schemas.py](backend/schemas.py).
+- `*.ipynb` notebooks — **historical / pedagogical only; do NOT use as the engine.**
 
-The **`LM` matrix is the central data structure**: shape `(6, n_elements)`, where `LM[:, e]` lists the 6 global DOF numbers (1-indexed; `0` = restrained/no DOF) for element `e` in the order `[Uxi, Uyi, Thetai, Uxj, Uyj, Thetaj]`. Assembly and displacement extraction both key off it.
+### The `LM` matrix (central data structure)
 
-[utils.py](utils.py) is only a pretty-printer for matrices.
+Shape `(6, n_elements)`; `LM[:, e]` lists the 6 global DOF numbers for element `e` in order `[Uxi, Uyi, Thetai, Uxj, Uyj, Thetaj]`. DOFs are **1-indexed; `0` = restrained**. Conventions: `Ux` is always `0` (horizontal beam, no axial); a support's `Uy` is `0` (blocked). The release works by **adding** DOFs at the target node: `R` frees the support's `Uy`; `M` doubles `Theta` (rotule); `V` doubles `Uy` (cut). `model.release_dofs`/`release_signs` carry the unit-load pattern; `model.node_uy` maps each node to its (left, right) vertical DOF so the solver can rebuild `y`.
 
-## Influence-line notebooks
+## Gotchas & invariants
 
-One notebook per influence line. Naming convention `LI<quantity><point>`:
-
-- `LIR*` — support **R**eaction (A, B, C)
-- `LIM*` — bending **M**oment (B, C, E, F)
-- `LIV*` — shear (effort tranchant, **V**) (B, C, E, F)
-- Points: A/B/C are supports; E/F are interior points (F = midspan of span AB).
-
-Standard workflow inside each notebook: define node coordinates `XY` → build elementary stiffness + rotation → assemble `K_global` → set a **unit nodal load** vector `P_global` at the DOF of interest (this is the Müller-Breslau application) → solve `U = np.linalg.solve(K_global, P_global)` → map the vertical displacements into the influence-line array `LI` → plot → save CSV.
-
-The beam is **discretized into 40 unit-length elements** with dimensionless properties `E = I = A = L = 1`; the resulting deflected shape *is* the influence line. When editing a notebook, the hand-written `LM` assignments, the `K_global`/`P_global` sizes, and the index slices that copy `LI` into the plotted `y` array must all stay consistent with the node/DOF numbering — these are the usual source of bugs.
-
-## Application notebooks
-
-- [application.ipynb](application.ipynb) — worked example of the stiffness method on a small frame with **real** material/section values (`E=2e8`, etc.), showing both explicit block assembly and the `LM`-based assembly.
-- [application_poutre_continue_discretise.ipynb](application_poutre_continue_discretise.ipynb) — the full discretized continuous-beam application.
+- **Mechanism / singular matrix**: the unit-load method requires the *released* structure to stay stable. Releasing the only other support (e.g. the reaction of a single simply-supported span) yields a singular `K` → explicit `RuntimeError`. Not supported (would need an imposed-displacement / Dirichlet method).
+- **Shear discontinuity**: for `V`, the `x` array is **doubled** at the cut to render the jump; `y_nodes` is the un-doubled per-node array. `vehicle_loads.interp` keeps the worse side at a jump.
+- **Validation strategy**: the historical CSVs in `resultats/` are **mostly wrong** (buggy hand `LM`); only `LIVE_resultats.csv` is correct. Tests therefore assert **analytical invariants** (sum of reaction LIs = 1 everywhere; LI = 0 at every support; unit value-jump for `V`; unit slope-jump for `M`) — never the CSVs (see `05` / D4). 42 tests across [tests/](tests/) must stay green.
 
 ## Conventions
 
 - Commit messages use bracketed prefixes: `[ADD]`, `[BUGFIX]`, `[CHANGE]`.
-- Output CSVs live in `resultats/`; figures referenced by [README.md](README.md) live in `images/`.
+- Notebook naming `LI<quantity><point>`: `LIR*` reaction, `LIM*` moment, `LIV*` shear; A/B/C are supports, E/F interior points.

@@ -42,6 +42,9 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
   - LI de moment : η a la dimension d'une longueur → effet en **kN·m**.
   - Essieux hors de la poutre : non comptabilisés.
   - À l'aplomb d'une coupure (LI de V discontinue) : on retient le côté défavorable.
+- **Balayage** : on promène le véhicule sur toute la poutre. On retient l'effet le plus
+  positif (`max`) ET le plus négatif (`min`) — une poutre continue présente les deux
+  (ex. soulèvement d'appui). Le cas `governing` est le plus grand en valeur absolue.
 
 ## R6 — Unités
 - Le moteur est **adimensionnel/agnostique** : on lui passe la géométrie dans une unité

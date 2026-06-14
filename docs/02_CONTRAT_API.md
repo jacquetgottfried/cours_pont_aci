@@ -72,9 +72,13 @@ Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-
   {
     "positions": [...],   // abscisse de l'essieu de tête (m)
     "effects": [...],     // effet résultant à chaque position
-    "max": {"value": 407.68, "lead_pos": 15.70,
-            "axle_positions": [{"x":15.7,"load":35.0}, ...]},
+    "max":       {"value": 407.68,  "lead_pos": 15.70, "axle_positions": [...]},
+    "min":       {"value": -264.97, "lead_pos": 2.40,  "axle_positions": [...]},
+    "governing": {"value": 407.68,  "lead_pos": 15.70, "axle_positions": [...]},
     "unit": "kN·m"        // "kN" (R, V) ou "kN·m" (M)
   }
   ```
+  `max` = effet le plus positif, `min` = le plus négatif, `governing` = le plus grand
+  en valeur absolue (cas le plus défavorable). `axle_positions` = [{x, load}] des
+  essieux sur la poutre à cette position.
 - Erreurs : `400` (idem métier), `422` (véhicule invalide, rear_spacing hors 4.3–9.0).

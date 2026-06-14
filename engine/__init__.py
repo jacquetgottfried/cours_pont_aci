@@ -8,10 +8,14 @@ from .influence_line import compute_influence_line
 from .model_builder import build_model, BeamModel
 from .vehicle_loads import (
     axle_layout,
+    effect_unit,
     load_effect,
     sweep_effect,
+    truck_rear_bounds,
     vehicle_catalog,
+    HL93,
     IM,
+    UNIT_SYSTEMS,
 )
 
 __all__ = [
@@ -19,8 +23,12 @@ __all__ = [
     "build_model",
     "BeamModel",
     "axle_layout",
+    "effect_unit",
     "load_effect",
     "sweep_effect",
+    "truck_rear_bounds",
     "vehicle_catalog",
+    "HL93",
     "IM",
+    "UNIT_SYSTEMS",
 ]

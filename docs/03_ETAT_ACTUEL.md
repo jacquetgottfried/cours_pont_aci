@@ -14,14 +14,17 @@ Branche : `refactor/ui-support`. **App 3 couches + charges mobiles HL-93 opérat
   `POST /vehicle-envelope`. Testé sous uvicorn.
 - Frontend statique : formulaire + graphe Chart.js + export CSV ; panneau véhicule
   (camion/tandem, espacement arrière réglable 4.3–9.0 m, impact, curseur de position
-  avec **flèches d'essieux** et effet live, **balayage auto** → effet max + graphe).
-- 41 TU au vert (22 LI + 19 charges mobiles) ; audits qualité passés.
+  avec **flèches d'essieux** et effet live, **balayage auto** → graphe effet/position
+  avec marqueurs **max (▲)** et **min (◆)** + cas gouvernant).
+- 42 TU au vert (22 LI + 20 charges mobiles) ; audits qualité passés.
 - `run.bat` : lance backend + ouvre le frontend. `requirements.txt` + docs à jour.
 
 ## Validé numériquement
 - LI : somme réactions=1 ; saut V unitaire ; saut de pente M unitaire ; zéros aux appuis.
 - Charges : effet essieu unique = P·η·1.33 ; math JS (live) = moteur Python (écart 0).
 - Bug corrigé : balayage sur LI d'effort tranchant (côté défavorable de la coupure).
+- Bug corrigé : graphes Chart.js qui grossissaient à l'infini (conteneur `.chart-box`
+  à hauteur fixe ; responsive + maintainAspectRatio:false).
 
 ## Limites connues
 - Charge de voie répartie (9.3 kN/m) non incluse (choix). Pas d'enveloppe combinée

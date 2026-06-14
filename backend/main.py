@@ -21,6 +21,7 @@ if _ROOT not in sys.path:
 from engine import (  # noqa: E402
     axle_layout,
     compute_influence_line,
+    effect_unit,
     sweep_effect,
     vehicle_catalog,
 )
@@ -76,9 +77,16 @@ def influence_line(req: InfluenceLineRequest):
 
 
 @app.get("/vehicles")
-def vehicles():
-    """Catalogue HL-93 (essieux, charges, espacements) — source unique de vérité."""
-    return vehicle_catalog()
+def vehicles(unit_system: str = "SI"):
+    """Catalogue HL-93 (essieux, charges, espacements) — source unique de vérité.
+
+    `unit_system` ("SI" | "US") sélectionne le jeu de valeurs AASHTO officiel et
+    les unités (kN/m vs kip/ft).
+    """
+    try:
+        return vehicle_catalog(unit_system)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/vehicle-envelope", response_model=VehicleEnvelopeResponse)
@@ -95,10 +103,14 @@ def vehicle_envelope(req: VehicleEnvelopeRequest):
             dx=req.dx,
             supports=req.supports,
         )
-        axles = axle_layout(req.vehicle, rear_spacing=req.rear_spacing)
+        axles = axle_layout(
+            req.vehicle,
+            rear_spacing=req.rear_spacing,
+            unit_system=req.unit_system,
+        )
         env = sweep_effect(li["x"], li["y"], axles, impact=req.impact)
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    env["unit"] = "kN·m" if req.quantity == "M" else "kN"
+    env["unit"] = effect_unit(req.unit_system, req.quantity)
     return env

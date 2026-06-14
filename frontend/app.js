@@ -10,7 +10,21 @@ let lastResult = null; // dernière ligne d'influence {x, y, meta}
 let catalog = null; // catalogue HL-93 (GET /vehicles)
 
 const LABELS = { R: "Réaction", M: "Moment", V: "Effort tranchant" };
-const effectUnit = (q) => (q === "M" ? "kN·m" : "kN");
+
+// Unités : aucun libellé n'est codé en dur. Le système choisi sélectionne les
+// valeurs par défaut des champs ; les unités d'affichage viennent du catalogue
+// (GET /vehicles?unit_system=...), donc identiques à celles du moteur.
+const UNIT_DEFAULTS = {
+  SI: { spans: "15, 10, 15", dx: "1", target_x: "0", force: "kN", length: "m" },
+  US: { spans: "50, 30, 50", dx: "2.5", target_x: "0", force: "kip", length: "ft" },
+};
+const unitSystem = () => $("unit-system").value;
+const forceUnit = () =>
+  catalog ? catalog.force_unit : UNIT_DEFAULTS[unitSystem()].force;
+const lengthUnit = () =>
+  catalog ? catalog.length_unit : UNIT_DEFAULTS[unitSystem()].length;
+const effectUnit = (q) =>
+  q === "M" ? `${forceUnit()}·${lengthUnit()}` : forceUnit();
 
 // --------------------------------------------------------------------------- //
 // Utilitaires unités / parsing
@@ -109,7 +123,7 @@ const axleArrowPlugin = {
       ctx.closePath();
       ctx.fill();
       // étiquette de charge
-      ctx.fillText(`${a.load} kN`, px, top - 3);
+      ctx.fillText(`${a.load} ${forceUnit()}`, px, top - 3);
     }
     ctx.restore();
   },
@@ -129,6 +143,7 @@ function buildPayload() {
     quantity: $("quantity").value,
     target_x: Number($("target_x").value),
     dx: Number($("dx").value),
+    unit_system: unitSystem(),
   };
   if (supportsRaw.length > 0) payload.supports = parseList(supportsRaw);
   return payload;
@@ -165,9 +180,10 @@ async function compute(evt) {
     setupVehiclePanel(data);
     $("export").disabled = false;
     const m = data.meta;
+    const lu = lengthUnit();
     $("info").textContent =
-      `${LABELS[m.quantity]} en x=${m.target_x} m · ${m.n_elements} éléments · ` +
-      `${m.n_ddl} DDL · appuis: ${m.support_positions.join(", ")} m`;
+      `${LABELS[m.quantity]} en x=${m.target_x} ${lu} · ${m.n_elements} éléments · ` +
+      `${m.n_ddl} DDL · appuis: ${m.support_positions.join(", ")} ${lu}`;
   } catch (e) {
     $("error").textContent = `Erreur : ${e.message}`;
   }
@@ -186,7 +202,7 @@ function drawInfluence(data) {
     data: {
       datasets: [
         {
-          label: `LI ${m.quantity} (x=${m.target_x} m)`,
+          label: `LI ${m.quantity} (x=${m.target_x} ${lengthUnit()})`,
           data: points,
           borderColor: "#2563eb",
           backgroundColor: "rgba(37,99,235,0.15)",
@@ -210,7 +226,10 @@ function drawInfluence(data) {
       maintainAspectRatio: false,
       animation: false,
       scales: {
-        x: { type: "linear", title: { display: true, text: "Portée x [m]" } },
+        x: {
+          type: "linear",
+          title: { display: true, text: `Portée x [${lengthUnit()}]` },
+        },
         y: { title: { display: true, text: `LI ${m.quantity}(x)` } },
       },
       plugins: { legend: { position: "top" } },
@@ -294,8 +313,8 @@ async function sweep() {
       throw new Error(detail);
     }
     showEnvelope(data);
-    // placer le véhicule à la position la plus défavorable
-    $("lead-pos").value = data.max.lead_pos;
+    // placer le véhicule à la position la plus défavorable (gouvernante)
+    $("lead-pos").value = data.governing.lead_pos;
     updateVehicle();
   } catch (e) {
     $("error").textContent = `Erreur : ${e.message}`;
@@ -304,14 +323,18 @@ async function sweep() {
 
 function showEnvelope(data) {
   const mx = data.max;
+  const mn = data.min;
+  const u = data.unit;
+  const lu = lengthUnit();
   const ro = $("max-readout");
   ro.hidden = false;
   ro.textContent =
-    `Effet maximal : ${mx.value.toFixed(2)} ${data.unit}\n` +
-    `Position de l'essieu de tête : ${mx.lead_pos.toFixed(2)} m\n` +
-    `Essieux : ${mx.axle_positions
-      .map((a) => `${a.load} kN @ ${a.x.toFixed(2)} m`)
-      .join("  ·  ")}`;
+    `Effet maximal : ${mx.value.toFixed(2)} ${u} ` +
+    `(essieu de tête à ${mx.lead_pos.toFixed(2)} ${lu})\n` +
+    `Effet minimal : ${mn.value.toFixed(2)} ${u} ` +
+    `(essieu de tête à ${mn.lead_pos.toFixed(2)} ${lu})\n` +
+    `Gouvernant : ${data.governing.value.toFixed(2)} ${u} ` +
+    `à ${data.governing.lead_pos.toFixed(2)} ${lu}`;
 
   // graphe effet vs position
   $("envelope-panel").hidden = false;
@@ -321,7 +344,7 @@ function showEnvelope(data) {
     data: {
       datasets: [
         {
-          label: `Effet (${data.unit})`,
+          label: `Effet (${u})`,
           data: pts,
           borderColor: "#059669",
           backgroundColor: "rgba(5,150,105,0.12)",
@@ -330,12 +353,22 @@ function showEnvelope(data) {
           tension: 0,
         },
         {
-          label: "Maximum",
+          label: `Max : ${mx.value.toFixed(1)} ${u}`,
           data: [{ x: mx.lead_pos, y: mx.value }],
           borderColor: "#dc2626",
           backgroundColor: "#dc2626",
           showLine: false,
-          pointRadius: 6,
+          pointStyle: "triangle",
+          pointRadius: 8,
+        },
+        {
+          label: `Min : ${mn.value.toFixed(1)} ${u}`,
+          data: [{ x: mn.lead_pos, y: mn.value }],
+          borderColor: "#2563eb",
+          backgroundColor: "#2563eb",
+          showLine: false,
+          pointStyle: "rectRot",
+          pointRadius: 8,
         },
       ],
     },
@@ -346,7 +379,7 @@ function showEnvelope(data) {
       scales: {
         x: {
           type: "linear",
-          title: { display: true, text: "Position essieu de tête [m]" },
+          title: { display: true, text: `Position essieu de tête [${lu}]` },
         },
         y: { title: { display: true, text: `Effet [${data.unit}]` } },
       },
@@ -362,14 +395,17 @@ function showEnvelope(data) {
 // --------------------------------------------------------------------------- //
 function exportCsv() {
   if (!lastResult) return;
-  const rows = ["x,y"];
+  const u = unitSystem();
+  const lu = lengthUnit();
+  // En-tête avec unité : un CSV en ft ne doit pas être confondu avec un CSV en m.
+  const rows = [`x [${lu}],y`];
   lastResult.x.forEach((xv, i) => rows.push(`${xv},${lastResult.y[i]}`));
   const blob = new Blob([rows.join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   const m = lastResult.meta;
   a.href = url;
-  a.download = `LI_${m.quantity}_x${m.target_x}.csv`;
+  a.download = `LI_${m.quantity}_x${m.target_x}_${u}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -379,11 +415,58 @@ function exportCsv() {
 // --------------------------------------------------------------------------- //
 async function loadCatalog() {
   try {
-    const resp = await fetch(`${apiBase()}/vehicles`);
+    const resp = await fetch(
+      `${apiBase()}/vehicles?unit_system=${encodeURIComponent(unitSystem())}`
+    );
     if (resp.ok) catalog = await resp.json();
   } catch (e) {
     // backend pas encore lancé : le catalogue sera rechargé au 1er calcul
   }
+  applyUnitLabels();
+}
+
+// Met à jour TOUS les libellés d'unité depuis le système courant / le catalogue.
+// Aucune valeur d'unité n'est codée en dur ailleurs.
+function applyUnitLabels() {
+  const lu = lengthUnit();
+  const fu = forceUnit();
+  document.querySelectorAll(".ulen").forEach((el) => (el.textContent = lu));
+  $("unit-hint").textContent =
+    unitSystem() === "SI"
+      ? "SI (longueurs en m, charges en kN)"
+      : "US (longueurs en ft, charges en kip)";
+  if (!catalog) return;
+  const t = catalog.truck;
+  const td = catalog.tandem;
+  $("opt-truck").textContent =
+    `Camion de calcul (${t.axles.map((a) => a.load).join(" / ")} ${fu})`;
+  $("opt-tandem").textContent =
+    `Tandem (${td.axles.map((a) => a.load).join(" / ")} ${fu})`;
+  // Curseur d'espacement arrière : bornes du système courant.
+  const rs = t.rear_spacing;
+  const slider = $("rear-spacing");
+  slider.min = rs.min;
+  slider.max = rs.max;
+  slider.step = unitSystem() === "SI" ? 0.1 : 0.5;
+  if (Number(slider.value) < rs.min || Number(slider.value) > rs.max) {
+    slider.value = rs.default;
+  }
+  $("rear-spacing-val").textContent = Number(slider.value).toFixed(1);
+}
+
+// Bascule SI <-> US : réinitialise les champs aux défauts de la nouvelle unité
+// (PAS de conversion numérique : éviterait dx hors nœud), recharge le catalogue
+// dans la nouvelle unité, puis relance un calcul propre.
+async function onUnitSystemChange() {
+  const d = UNIT_DEFAULTS[unitSystem()];
+  $("spans").value = d.spans;
+  $("dx").value = d.dx;
+  $("target_x").value = d.target_x;
+  $("supports").value = "";
+  $("quantity").value = "R";
+  catalog = null; // forcer le rechargement avec la nouvelle unité
+  await loadCatalog();
+  compute();
 }
 
 $("form").addEventListener("submit", async (e) => {
@@ -392,6 +475,7 @@ $("form").addEventListener("submit", async (e) => {
   compute();
 });
 $("export").addEventListener("click", exportCsv);
+$("unit-system").addEventListener("change", onUnitSystemChange);
 $("vehicle").addEventListener("change", () => {
   toggleRearSpacing();
   updateVehicle();

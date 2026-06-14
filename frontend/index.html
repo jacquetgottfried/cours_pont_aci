@@ -17,12 +17,20 @@
     <section class="panel">
       <form id="form">
         <label>
-          Travées (m, séparées par des virgules)
+          Système d'unités
+          <select id="unit-system">
+            <option value="SI">SI (m, kN)</option>
+            <option value="US">US (ft, kip)</option>
+          </select>
+        </label>
+
+        <label>
+          Travées (<span class="ulen">m</span>, séparées par des virgules)
           <input id="spans" type="text" value="15, 10, 15" />
         </label>
 
         <label>
-          Appuis explicites (m, optionnel)
+          Appuis explicites (<span class="ulen">m</span>, optionnel)
           <input id="supports" type="text" placeholder="déduits des travées" />
         </label>
 
@@ -36,16 +44,19 @@
         </label>
 
         <label>
-          Position de la grandeur x (m)
+          Position de la grandeur x (<span class="ulen">m</span>)
           <input id="target_x" type="number" value="0" step="any" />
         </label>
 
         <label>
-          Discrétisation dx (m)
+          Discrétisation dx (<span class="ulen">m</span>)
           <input id="dx" type="number" value="1" min="0.05" step="any" />
         </label>
 
-        <p class="hint">Unités : SI (longueurs en m, charges en kN).</p>
+        <p class="hint">
+          Unités : <span id="unit-hint">SI (longueurs en m, charges en kN)</span>.
+          Changer de système réinitialise les champs aux valeurs par défaut.
+        </p>
 
         <label>
           URL de l'API
@@ -69,13 +80,14 @@
       <label>
         Type de véhicule
         <select id="vehicle">
-          <option value="truck">Camion de calcul (35 / 145 / 145 kN)</option>
-          <option value="tandem">Tandem (110 / 110 kN)</option>
+          <option value="truck" id="opt-truck">Camion de calcul (35 / 145 / 145 kN)</option>
+          <option value="tandem" id="opt-tandem">Tandem (110 / 110 kN)</option>
         </select>
       </label>
 
       <label id="rear-spacing-label">
-        Espacement des essieux arrière : <span id="rear-spacing-val">4.3</span> m
+        Espacement des essieux arrière :
+        <span id="rear-spacing-val">4.3</span> <span class="ulen">m</span>
         <input id="rear-spacing" type="range" min="4.3" max="9.0" step="0.1" value="4.3" />
       </label>
 
@@ -85,7 +97,8 @@
       </label>
 
       <label>
-        Position de l'essieu de tête : <span id="lead-val">0.0</span> m
+        Position de l'essieu de tête :
+        <span id="lead-val">0.0</span> <span class="ulen">m</span>
         <input id="lead-pos" type="range" min="0" max="40" step="0.1" value="0" />
       </label>
 
