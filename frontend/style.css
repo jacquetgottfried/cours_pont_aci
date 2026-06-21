@@ -91,12 +91,15 @@ button[type="button"] { background: #475569; }
 }
 
 #vehicle-panel h2,
-#envelope-panel h2 {
+#envelope-panel h2,
+#distributed-panel h2,
+#dist-envelope-panel h2 {
   font-size: 1rem;
   margin: 0 0 0.8rem;
 }
 
-#vehicle-panel label { margin-bottom: 0.8rem; }
+#vehicle-panel label,
+#distributed-panel label { margin-bottom: 0.8rem; }
 #vehicle-panel label.check {
   flex-direction: row;
   align-items: center;

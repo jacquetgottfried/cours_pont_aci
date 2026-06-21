@@ -21,12 +21,17 @@ if _ROOT not in sys.path:
 from engine import (  # noqa: E402
     axle_layout,
     compute_influence_line,
+    distributed_effect,
+    distributed_envelope,
     effect_unit,
     sweep_effect,
     vehicle_catalog,
 )
 
 from .schemas import (  # noqa: E402
+    DistributedEffectRequest,
+    DistributedEffectResponse,
+    DistributedEnvelopeResponse,
     InfluenceLineRequest,
     InfluenceLineResponse,
     VehicleEnvelopeRequest,
@@ -109,6 +114,55 @@ def vehicle_envelope(req: VehicleEnvelopeRequest):
             unit_system=req.unit_system,
         )
         env = sweep_effect(li["x"], li["y"], axles, impact=req.impact)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    env["unit"] = effect_unit(req.unit_system, req.quantity)
+    return env
+
+
+@app.post("/distributed-effect", response_model=DistributedEffectResponse)
+def distributed_effect_route(req: DistributedEffectRequest):
+    """Effet des charges réparties DC/DW sur la ligne d'influence demandée.
+
+    Renvoie l'effet « toute la poutre chargée » (charge permanente) ET l'enveloppe
+    par chargement alterné (max sur les zones η>0, min sur les zones η<0), décomposés
+    DC / DW / somme. L'effet est en kN/kip (R, V) ou kN·m/kip·ft (M).
+    """
+    try:
+        li = compute_influence_line(
+            spans=req.spans,
+            quantity=req.quantity,
+            target_x=req.target_x,
+            dx=req.dx,
+            supports=req.supports,
+        )
+        res = distributed_effect(li["x"], li["y"], req.w_dc, req.w_dw)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    res["unit"] = effect_unit(req.unit_system, req.quantity)
+    return res
+
+
+@app.post("/distributed-envelope", response_model=DistributedEnvelopeResponse)
+def distributed_envelope_route(req: DistributedEffectRequest):
+    """Ligne d'enveloppe d'une charge répartie DC/DW le long de la poutre.
+
+    Balaye la section étudiée sur tous les nœuds et renvoie, pour la grandeur
+    demandée, les effets max (alterné +), min (alterné -) et permanent à chaque
+    section, plus le max positif par travée et le min négatif sur appui. `target_x`
+    est ignoré ici.
+    """
+    try:
+        env = distributed_envelope(
+            spans=req.spans,
+            quantity=req.quantity,
+            w_dc=req.w_dc,
+            w_dw=req.w_dw,
+            dx=req.dx,
+            supports=req.supports,
+        )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

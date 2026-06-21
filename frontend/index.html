@@ -114,6 +114,41 @@
       <h2>Effet en fonction de la position du véhicule</h2>
       <div class="chart-box"><canvas id="envelope-chart"></canvas></div>
     </section>
+
+    <section class="panel" id="distributed-panel" hidden>
+      <h2>Charge répartie permanente (DC poids propre / DW revêtement)</h2>
+
+      <label>
+        Charge DC (poids propre) — <span class="uload">kN/m</span>
+        <input id="w-dc" type="number" min="0" step="any" value="10" />
+      </label>
+
+      <label>
+        Charge DW (revêtement) — <span class="uload">kN/m</span>
+        <input id="w-dw" type="number" min="0" step="any" value="3" />
+      </label>
+
+      <label>
+        Configuration de chargement
+        <select id="dist-view">
+          <option value="alterne">Chargement alterné défavorable (max / min)</option>
+          <option value="permanent">Toute la poutre (charge permanente)</option>
+        </select>
+      </label>
+
+      <div class="effect-readout">
+        Effet à cette configuration : <strong id="dist-effect-val">—</strong>
+      </div>
+
+      <button type="button" id="dist-sweep">Ligne d'enveloppe → effet max (mi-travée, appui)</button>
+      <button type="button" id="dist-export" disabled>Exporter l'enveloppe CSV</button>
+      <div class="effect-readout max" id="dist-max-readout" hidden></div>
+    </section>
+
+    <section class="panel chart-panel" id="dist-envelope-panel" hidden>
+      <h2>Ligne d'enveloppe de la charge répartie</h2>
+      <div class="chart-box"><canvas id="dist-envelope-chart"></canvas></div>
+    </section>
   </main>
 
   <script src="app.js"></script>

@@ -51,3 +51,43 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
   de longueur (m en SI) et il renvoie les ordonnées dans cette même unité. Seule la
   **longueur** a un effet réel sur une ligne d'influence pure ; la force (kN) n'intervient
   qu'avec les charges mobiles (R5).
+
+## R7 — Bascule d'unités SI / US (AASHTO LRFD) — validé
+- L'AASHTO LRFD définit le HL-93 dans les **deux systèmes** avec des valeurs
+  RÉGLEMENTAIRES DISTINCTES (pas des conversions arrondies) :
+  - **US (customary)** : camion 8 / 32 / 32 kip ; tête→1er arrière = 14 ft ;
+    arrière variable 14→30 ft. Tandem : 2 essieux de 25 kip espacés de 4.0 ft.
+  - **SI** : valeurs de R5 (35/145/145 kN, 4.3 m, 4.3→9.0 m ; tandem 110 kN, 1.2 m).
+  - IM = 33 % est **sans dimension, identique** dans les deux systèmes.
+- **On ne convertit JAMAIS numériquement** un véhicule HL-93 : on stocke les deux jeux
+  officiels (`engine.vehicle_loads.HL93`). Convertir le SI donnerait 7.87 kip ≠ 8 kip,
+  donc un véhicule inexistant dans les deux codes (faux pédagogiquement).
+- **Cohérence des unités** : une seule unité traverse tout le pipeline d'un calcul.
+  Effet en force seule (R, V) ou force×longueur (M) → kN/kN·m (SI), kip/kip·ft (US).
+- **Agnosticité préservée** (R6) : `unit_system` ne rentre PAS dans le moteur ; il pilote
+  uniquement le catalogue véhicule, les bornes `rear_spacing`, les libellés et l'unité
+  d'effet. Les invariants R3 (sans dimension) valent à l'identique dans les deux systèmes.
+
+## R8 — Charges réparties permanentes DC / DW (AASHTO) — validé
+- **DC** = poids propre (structure) ; **DW** = revêtement (wearing surface). Ce sont des
+  charges réparties **permanentes** (kN/m en SI, kip/ft en US).
+- **Effet d'une charge répartie** d'intensité `w` sur une ligne d'influence `η(x)` :
+  `effet = w·∫η dx` (sur la longueur chargée). On réutilise le moteur de LI ; **aucun
+  nouveau code éléments finis** (cf. 05 D8).
+- **Charge permanente (toute la poutre, `full`)** : on intègre `η` sur toute la poutre.
+  C'est numériquement **identique** à une analyse EF chargée sur toutes les travées →
+  résultat correct d'une vraie charge permanente.
+- **Chargement alterné (enveloppe défavorable)** : pour maximiser on ne charge que là où
+  `η>0` → `max = w·∫η⁺` ; pour minimiser, là où `η<0` → `min = w·∫η⁻`. **La ligne
+  d'influence donne ELLE-MÊME la pire configuration** (travées alternées) : pas de
+  recherche par force brute. Les **zones chargées** sont les intervalles de signe de `η`.
+- **Ligne d'enveloppe** : on balaie la section étudiée sur les nœuds. Sur poutre continue,
+  le **moment max à mi-travée** (positif) et le **moment max sur appui** (négatif, souvent
+  gouvernant) ressortent directement ; idem pour l'**effort tranchant max**.
+- **Unités** (suivent R5/R6) : force seule pour R/V (`η` sans dimension), force×longueur
+  pour M (`η` a la dimension d'une longueur). `unit_system` ne rentre pas dans le moteur.
+- **DC et DW non factorisés** : pas de coefficient (1.25/1.50…) ; on rend l'effet de
+  chacun et leur somme. La charge de voie répartie (9.3 kN/m) reste hors périmètre.
+- **Invariants exacts** (validation) : `∫η⁺ + ∫η⁻ = ∫η` et `∫η⁺ ≥ ∫η ≥ ∫η⁻` ; moment à
+  mi-travée d'une travée simple sous charge uniforme = `w·L²/8` ; les segments dédoublés
+  au point de coupure (saut de V) sont ignorés dans l'intégration.

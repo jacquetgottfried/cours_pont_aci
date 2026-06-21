@@ -59,7 +59,7 @@ Shape `(6, n_elements)`; `LM[:, e]` lists the 6 global DOF numbers for element `
 
 - **Mechanism / singular matrix**: the unit-load method requires the *released* structure to stay stable. Releasing the only other support (e.g. the reaction of a single simply-supported span) yields a singular `K` → explicit `RuntimeError`. Not supported (would need an imposed-displacement / Dirichlet method).
 - **Shear discontinuity**: for `V`, the `x` array is **doubled** at the cut to render the jump; `y_nodes` is the un-doubled per-node array. `vehicle_loads.interp` keeps the worse side at a jump.
-- **Validation strategy**: the historical CSVs in `resultats/` are **mostly wrong** (buggy hand `LM`); only `LIVE_resultats.csv` is correct. Tests therefore assert **analytical invariants** (sum of reaction LIs = 1 everywhere; LI = 0 at every support; unit value-jump for `V`; unit slope-jump for `M`) — never the CSVs (see `05` / D4). 42 tests across [tests/](tests/) must stay green.
+- **Validation strategy**: the historical CSVs in `resultats/` are **mostly wrong** (buggy hand `LM`); only `LIVE_resultats.csv` is correct. Tests therefore assert **analytical invariants** (sum of reaction LIs = 1 everywhere; LI = 0 at every support; unit value-jump for `V`; unit slope-jump for `M`) — never the CSVs (see `05` / D4). 65 tests across [tests/](tests/) must stay green (LI invariants, HL-93 loads SI/US, API integration).
 
 ## Conventions
 

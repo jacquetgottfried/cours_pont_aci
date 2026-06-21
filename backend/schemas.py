@@ -177,3 +177,99 @@ class VehicleEnvelopeResponse(BaseModel):
         ..., description="Extremum de plus grande valeur absolue (le plus défavorable)."
     )
     unit: str = Field(..., description="Unité de l'effet : 'kN' ou 'kN·m'.")
+
+
+# --------------------------------------------------------------------------- #
+# Charges réparties permanentes DC (poids propre) / DW (revêtement)
+# --------------------------------------------------------------------------- #
+class DistributedEffectRequest(InfluenceLineRequest):
+    """Ligne d'influence + charges réparties DC/DW à intégrer dessus.
+
+    DC et DW ne sont PAS factorisés (pas de coefficient 1.25/1.50…) : l'API renvoie
+    l'effet de chacun et leur somme. Pour l'enveloppe (`/distributed-envelope`), le
+    champ `target_x` est ignoré (le balayage parcourt toutes les sections).
+    """
+
+    w_dc: float = Field(
+        0.0,
+        ge=0,
+        description="Intensité DC (poids propre), unité du système (kN/m | kip/ft).",
+    )
+    w_dw: float = Field(
+        0.0,
+        ge=0,
+        description="Intensité DW (revêtement), unité du système (kN/m | kip/ft).",
+    )
+
+    @model_validator(mode="after")
+    def _check_loads(self) -> "DistributedEffectRequest":
+        if self.w_dc <= 0 and self.w_dw <= 0:
+            raise ValueError(
+                "Au moins une des charges w_dc / w_dw doit être strictement positive."
+            )
+        return self
+
+
+class DistributedComponent(BaseModel):
+    """Effet d'une configuration de charge, décomposé DC / DW / somme."""
+
+    dc: float = Field(..., description="Effet de la charge DC seule.")
+    dw: float = Field(..., description="Effet de la charge DW seule.")
+    total: float = Field(..., description="Effet de DC + DW.")
+    zones: List[List[float]] = Field(
+        ..., description="Intervalles chargés [[x0, x1], …] (toute la poutre si 'full')."
+    )
+
+
+class DistributedEffectResponse(BaseModel):
+    """Effet des charges réparties DC/DW sur une ligne d'influence donnée."""
+
+    full: DistributedComponent = Field(
+        ..., description="Toute la poutre chargée (charge permanente)."
+    )
+    max: DistributedComponent = Field(
+        ..., description="Chargement alterné des zones η>0 (effet le plus positif)."
+    )
+    min: DistributedComponent = Field(
+        ..., description="Chargement alterné des zones η<0 (effet le plus négatif)."
+    )
+    governing: DistributedComponent = Field(
+        ..., description="De max/min, le plus grand en valeur absolue."
+    )
+    w_dc: float
+    w_dw: float
+    unit: str = Field(..., description="Unité : 'kN'/'kip' ou 'kN·m'/'kip·ft'.")
+
+
+class DistributedPoint(BaseModel):
+    position: float
+    value: float
+
+
+class DistributedGoverning(BaseModel):
+    value: float
+    position: float
+    zones: List[List[float]]
+    sign: int = Field(..., description="+1 (effet positif) ou -1 (effet négatif).")
+
+
+class DistributedEnvelopeResponse(BaseModel):
+    """Ligne d'enveloppe d'une charge répartie DC/DW le long de la poutre."""
+
+    positions: List[float] = Field(..., description="Abscisse de la section étudiée.")
+    max: List[float] = Field(..., description="Effet total DC+DW, chargement alterné +.")
+    min: List[float] = Field(..., description="Effet total DC+DW, chargement alterné -.")
+    full: List[float] = Field(..., description="Effet total DC+DW, toute la poutre.")
+    governing: DistributedGoverning = Field(
+        ..., description="Section et effet les plus défavorables."
+    )
+    midspan_points: List[DistributedPoint] = Field(
+        ..., description="Max positif par travée (moment max à mi-travée)."
+    )
+    support_points: List[DistributedPoint] = Field(
+        ..., description="Min négatif au droit des appuis intérieurs (moment sur appui)."
+    )
+    quantity: str
+    w_dc: float
+    w_dw: float
+    unit: str = Field(..., description="Unité de l'effet.")

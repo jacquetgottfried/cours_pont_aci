@@ -6,7 +6,9 @@
 const $ = (id) => document.getElementById(id);
 let chart = null;
 let envChart = null;
+let distEnvChart = null; // graphe d'enveloppe de la charge répartie
 let lastResult = null; // dernière ligne d'influence {x, y, meta}
+let lastEnvelope = null; // dernière enveloppe de charge répartie (POST /distributed-envelope)
 let catalog = null; // catalogue HL-93 (GET /vehicles)
 
 const LABELS = { R: "Réaction", M: "Moment", V: "Effort tranchant" };
@@ -15,8 +17,14 @@ const LABELS = { R: "Réaction", M: "Moment", V: "Effort tranchant" };
 // valeurs par défaut des champs ; les unités d'affichage viennent du catalogue
 // (GET /vehicles?unit_system=...), donc identiques à celles du moteur.
 const UNIT_DEFAULTS = {
-  SI: { spans: "15, 10, 15", dx: "1", target_x: "0", force: "kN", length: "m" },
-  US: { spans: "50, 30, 50", dx: "2.5", target_x: "0", force: "kip", length: "ft" },
+  SI: {
+    spans: "15, 10, 15", dx: "1", target_x: "0",
+    force: "kN", length: "m", w_dc: "10", w_dw: "3",
+  },
+  US: {
+    spans: "50, 30, 50", dx: "2.5", target_x: "0",
+    force: "kip", length: "ft", w_dc: "1.0", w_dw: "0.3",
+  },
 };
 const unitSystem = () => $("unit-system").value;
 const forceUnit = () =>
@@ -91,6 +99,47 @@ function loadEffect(lead, axles, impact) {
 }
 
 // --------------------------------------------------------------------------- //
+// Math charge répartie (identique à engine/distributed_loads.integrate_il)
+// effet = w · ∫η dx. sign 0 = toute la poutre ; +1 = ∫η⁺ ; -1 = ∫η⁻.
+// --------------------------------------------------------------------------- //
+function integrateIl(x, y, sign) {
+  let total = 0;
+  const raw = [];
+  for (let i = 0; i < x.length - 1; i++) {
+    const x0 = x[i], x1 = x[i + 1];
+    const dxs = x1 - x0;
+    if (dxs <= 1e-9) continue; // segment dédoublé (saut d'effort tranchant)
+    const y0 = y[i], y1 = y[i + 1];
+    if (sign === 0) {
+      total += 0.5 * (y0 + y1) * dxs;
+      continue;
+    }
+    const s0 = sign * y0, s1 = sign * y1;
+    if (s0 >= 0 && s1 >= 0) {
+      const area = 0.5 * (y0 + y1) * dxs;
+      total += area;
+      if (Math.abs(area) > 1e-9) raw.push([x0, x1]);
+    } else if (s0 <= 0 && s1 <= 0) {
+      // rien du bon côté
+    } else {
+      const xr = x0 - (y0 * dxs) / (y1 - y0); // passage par zéro
+      if (s0 > 0) { total += 0.5 * y0 * (xr - x0); raw.push([x0, xr]); }
+      else { total += 0.5 * y1 * (x1 - xr); raw.push([xr, x1]); }
+    }
+  }
+  if (sign === 0) return { integral: total, zones: [[x[0], x[x.length - 1]]] };
+  const zones = [];
+  for (const z of raw) {
+    if (zones.length && Math.abs(z[0] - zones[zones.length - 1][1]) <= 1e-9) {
+      zones[zones.length - 1][1] = z[1]; // fusion des intervalles jointifs
+    } else {
+      zones.push([z[0], z[1]]);
+    }
+  }
+  return { integral: total, zones };
+}
+
+// --------------------------------------------------------------------------- //
 // Plugin Chart.js : flèches des essieux sur la poutre
 // --------------------------------------------------------------------------- //
 const axleArrowPlugin = {
@@ -124,6 +173,27 @@ const axleArrowPlugin = {
       ctx.fill();
       // étiquette de charge
       ctx.fillText(`${a.load} ${forceUnit()}`, px, top - 3);
+    }
+    ctx.restore();
+  },
+};
+
+// --------------------------------------------------------------------------- //
+// Plugin Chart.js : ombrage des zones chargées par la charge répartie
+// chart.$loadedZones = [{ range: [x0, x1], color: "rgba(...)" }, ...]
+// --------------------------------------------------------------------------- //
+const loadedZonesPlugin = {
+  id: "loadedZones",
+  beforeDatasetsDraw(c) {
+    const zones = c.$loadedZones || [];
+    if (!zones.length) return;
+    const { ctx, chartArea, scales } = c;
+    ctx.save();
+    for (const z of zones) {
+      const a = scales.x.getPixelForValue(z.range[0]);
+      const b = scales.x.getPixelForValue(z.range[1]);
+      ctx.fillStyle = z.color;
+      ctx.fillRect(a, chartArea.top, b - a, chartArea.bottom - chartArea.top);
     }
     ctx.restore();
   },
@@ -178,6 +248,7 @@ async function compute(evt) {
     lastResult = data;
     drawInfluence(data);
     setupVehiclePanel(data);
+    setupDistributedPanel(data);
     $("export").disabled = false;
     const m = data.meta;
     const lu = lengthUnit();
@@ -234,7 +305,7 @@ function drawInfluence(data) {
       },
       plugins: { legend: { position: "top" } },
     },
-    plugins: [axleArrowPlugin],
+    plugins: [axleArrowPlugin, loadedZonesPlugin],
   };
 
   if (chart) chart.destroy();
@@ -391,6 +462,199 @@ function showEnvelope(data) {
 }
 
 // --------------------------------------------------------------------------- //
+// Panneau charge répartie DC/DW : effet live + ombrage des zones chargées
+// --------------------------------------------------------------------------- //
+function setupDistributedPanel(data) {
+  $("distributed-panel").hidden = false;
+  $("dist-max-readout").hidden = true;
+  $("dist-envelope-panel").hidden = true;
+  $("dist-export").disabled = true;
+  lastEnvelope = null;
+  updateDistributed();
+}
+
+function setLoadedZones(zones) {
+  if (chart) {
+    chart.$loadedZones = zones;
+    chart.update("none");
+  }
+}
+
+function updateDistributed() {
+  if (!lastResult) return;
+  const wdc = Number($("w-dc").value) || 0;
+  const wdw = Number($("w-dw").value) || 0;
+  const w = wdc + wdw;
+  const { x, y } = lastResult;
+  const u = effectUnit(lastResult.meta.quantity);
+
+  if ($("dist-view").value === "permanent") {
+    const { integral, zones } = integrateIl(x, y, 0);
+    const dc = wdc * integral, dw = wdw * integral, total = w * integral;
+    $("dist-effect-val").textContent =
+      `${total.toFixed(2)} ${u}  (DC ${dc.toFixed(1)} + DW ${dw.toFixed(1)}, toute la poutre)`;
+    setLoadedZones(zones.map((r) => ({ range: r, color: "rgba(5,150,105,0.12)" })));
+  } else {
+    const pos = integrateIl(x, y, 1);
+    const neg = integrateIl(x, y, -1);
+    const maxT = w * pos.integral, minT = w * neg.integral;
+    $("dist-effect-val").textContent =
+      `max ${maxT.toFixed(2)} ${u}  ·  min ${minT.toFixed(2)} ${u}`;
+    setLoadedZones([
+      ...pos.zones.map((r) => ({ range: r, color: "rgba(5,150,105,0.16)" })),
+      ...neg.zones.map((r) => ({ range: r, color: "rgba(220,38,38,0.12)" })),
+    ]);
+  }
+}
+
+async function distributedSweep() {
+  if (!lastResult) return;
+  $("error").textContent = "";
+  const payload = {
+    ...buildPayload(),
+    w_dc: Number($("w-dc").value) || 0,
+    w_dw: Number($("w-dw").value) || 0,
+  };
+  try {
+    const resp = await fetch(`${apiBase()}/distributed-envelope`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      const detail =
+        typeof data.detail === "string"
+          ? data.detail
+          : JSON.stringify(data.detail);
+      throw new Error(detail);
+    }
+    lastEnvelope = data;
+    showDistributedEnvelope(data);
+    $("dist-export").disabled = false;
+  } catch (e) {
+    $("error").textContent = `Erreur : ${e.message}`;
+  }
+}
+
+function showDistributedEnvelope(data) {
+  const u = data.unit;
+  const lu = lengthUnit();
+  const g = data.governing;
+  const worst = (pts) =>
+    pts.reduce((a, b) => (Math.abs(b.value) > Math.abs(a.value) ? b : a));
+
+  const ro = $("dist-max-readout");
+  ro.hidden = false;
+  const lines = [
+    `Effet gouvernant : ${g.value.toFixed(2)} ${u} à x=${g.position.toFixed(2)} ${lu} ` +
+      `(chargement ${g.sign > 0 ? "+" : "−"})`,
+  ];
+  if (data.midspan_points.length) {
+    const m = worst(data.midspan_points);
+    lines.push(
+      `Effet max à mi-travée : ${m.value.toFixed(2)} ${u} (x=${m.position.toFixed(2)} ${lu})`
+    );
+  }
+  if (data.support_points.length) {
+    const s = worst(data.support_points);
+    lines.push(
+      `Effet max sur appui : ${s.value.toFixed(2)} ${u} (x=${s.position.toFixed(2)} ${lu})`
+    );
+  }
+  ro.textContent = lines.join("\n");
+
+  $("dist-envelope-panel").hidden = false;
+  const series = (arr) => data.positions.map((p, i) => ({ x: p, y: arr[i] }));
+  const pts = (list) => list.map((p) => ({ x: p.position, y: p.value }));
+  const cfg = {
+    type: "line",
+    data: {
+      datasets: [
+        {
+          label: `Enveloppe max (${u})`,
+          data: series(data.max),
+          borderColor: "#dc2626",
+          backgroundColor: "rgba(220,38,38,0.10)",
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+        },
+        {
+          label: `Enveloppe min (${u})`,
+          data: series(data.min),
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37,99,235,0.10)",
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+        },
+        {
+          label: `Permanent (${u})`,
+          data: series(data.full),
+          borderColor: "#6b7280",
+          borderDash: [6, 4],
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+        },
+        {
+          label: "Max mi-travée",
+          data: pts(data.midspan_points),
+          borderColor: "#dc2626",
+          backgroundColor: "#dc2626",
+          showLine: false,
+          pointStyle: "triangle",
+          pointRadius: 7,
+        },
+        {
+          label: "Max sur appui",
+          data: pts(data.support_points),
+          borderColor: "#2563eb",
+          backgroundColor: "#2563eb",
+          showLine: false,
+          pointStyle: "rectRot",
+          pointRadius: 7,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: {
+          type: "linear",
+          title: { display: true, text: `Position de la section x [${lu}]` },
+        },
+        y: { title: { display: true, text: `Effet [${u}]` } },
+      },
+      plugins: { legend: { position: "top" } },
+    },
+  };
+  if (distEnvChart) distEnvChart.destroy();
+  distEnvChart = new Chart($("dist-envelope-chart"), cfg);
+}
+
+function exportDistributedCsv() {
+  if (!lastEnvelope) return;
+  const d = lastEnvelope;
+  const u = unitSystem();
+  const lu = lengthUnit();
+  const rows = [`x [${lu}],max [${d.unit}],min [${d.unit}],full [${d.unit}]`];
+  d.positions.forEach((p, i) =>
+    rows.push(`${p},${d.max[i]},${d.min[i]},${d.full[i]}`)
+  );
+  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ENV_${d.quantity}_${u}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// --------------------------------------------------------------------------- //
 // Export CSV de la ligne d'influence
 // --------------------------------------------------------------------------- //
 function exportCsv() {
@@ -431,6 +695,7 @@ function applyUnitLabels() {
   const lu = lengthUnit();
   const fu = forceUnit();
   document.querySelectorAll(".ulen").forEach((el) => (el.textContent = lu));
+  document.querySelectorAll(".uload").forEach((el) => (el.textContent = `${fu}/${lu}`));
   $("unit-hint").textContent =
     unitSystem() === "SI"
       ? "SI (longueurs en m, charges en kN)"
@@ -464,6 +729,8 @@ async function onUnitSystemChange() {
   $("target_x").value = d.target_x;
   $("supports").value = "";
   $("quantity").value = "R";
+  $("w-dc").value = d.w_dc;
+  $("w-dw").value = d.w_dw;
   catalog = null; // forcer le rechargement avec la nouvelle unité
   await loadCatalog();
   compute();
@@ -484,5 +751,10 @@ $("rear-spacing").addEventListener("input", updateVehicle);
 $("impact").addEventListener("change", updateVehicle);
 $("lead-pos").addEventListener("input", updateVehicle);
 $("sweep").addEventListener("click", sweep);
+$("w-dc").addEventListener("input", updateDistributed);
+$("w-dw").addEventListener("input", updateDistributed);
+$("dist-view").addEventListener("change", updateDistributed);
+$("dist-sweep").addEventListener("click", distributedSweep);
+$("dist-export").addEventListener("click", exportDistributedCsv);
 
 loadCatalog();

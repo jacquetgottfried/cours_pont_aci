@@ -30,3 +30,33 @@ La résolution par charge unitaire exige que la structure libérée reste stable
 l'unique autre appui (réaction d'une travée simplement appuyée) crée un mécanisme :
 matrice singulière, erreur explicite. Gérer ce cas nécessiterait la méthode du
 déplacement imposé (condition de Dirichlet) — non implémentée.
+
+## D5 — Convertir numériquement le véhicule HL-93 SI→US (rejeté)
+Tentant de ne stocker qu'un jeu (SI) et de convertir (×1/4.4482, ×1/0.3048) pour l'US.
+Rejeté : l'AASHTO définit des valeurs US **officielles distinctes** (8/32/32 kip, 14 ft),
+pas des conversions. Convertir donnerait 7.87 kip, 14.1 ft… — un véhicule qui n'existe
+dans aucun code, et faux pédagogiquement. On stocke les **deux jeux officiels** (cf. 04 R7).
+
+## D6 — Convertir automatiquement la géométrie saisie au changement d'unité (rejeté)
+Au toggle SI↔US, convertir les valeurs déjà saisies (15 m → 49.21 ft). Rejeté : casse
+l'invariant R4 (chaque appui/point sur un nœud, `dx` divise les positions) — `dx` et les
+positions converties ne tombent plus sur la grille → erreurs 400 immédiates après bascule.
+Choix retenu : **réinitialiser les champs aux valeurs par défaut** de la nouvelle unité.
+(Une conversion explicite avec re-snap sur la grille reste une évolution possible.)
+
+## D7 — Mettre `unit_system` dans `compute_influence_line` (rejeté)
+Faire connaître l'unité au moteur. Rejeté : briserait l'agnosticité (04 R6/R7) pour un gain
+nul (les ordonnées sortent déjà dans l'unité d'entrée). L'unité reste un concept de bord
+(catalogue véhicule, libellés, unité d'effet), géré par `vehicle_loads` / backend / frontend.
+
+## D8 — Seconde analyse EF avec charges d'élément pour DC/DW (rejeté)
+Pour les charges réparties permanentes, refaire une analyse EF directe : charges réparties
+sur chaque élément → forces d'encastrement → assemblage → résolution → reconstruction du
+diagramme M/V. Rejeté : **redondant**. L'effet `w·∫η dx` (cf. 04 R8) est mathématiquement
+identique (c'est la définition même de la ligne d'influence) et réutilise
+`compute_influence_line` **sans aucun nouveau code EF** (`calcul_structure.py` n'a ni
+forces d'encastrement ni reconstruction de diagramme, et n'en a pas besoin). On garde la
+philosophie « une fonction générique » : on intègre la LI déjà produite par le moteur.
+Rejeté aussi : la **recherche de configuration par force brute** (essayer toutes les
+combinaisons de travées chargées). Inutile — le **signe de la ligne d'influence** donne
+directement la pire configuration (`∫η⁺` pour le max, `∫η⁻` pour le min).

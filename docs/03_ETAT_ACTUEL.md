@@ -5,32 +5,36 @@
 
 # État actuel
 
-Branche : `refactor/ui-support`. **App 3 couches + charges mobiles HL-93 opérationnelles.**
+Branche : `refactor/ui-support`. **App 3 couches + HL-93 + charges réparties DC/DW + SI/US.**
 
 ## Fait
-- Moteur `engine/` : `compute_influence_line(...)` (LM auto) + `vehicle_loads.py`
-  (charges mobiles HL-93 SI : effet, balayage, max, impact IM=33 %).
-- Backend FastAPI : `POST /influence-line`, `GET /health`, `GET /vehicles`,
-  `POST /vehicle-envelope`. Testé sous uvicorn.
-- Frontend statique : formulaire + graphe Chart.js + export CSV ; panneau véhicule
-  (camion/tandem, espacement arrière réglable 4.3–9.0 m, impact, curseur de position
-  avec **flèches d'essieux** et effet live, **balayage auto** → graphe effet/position
-  avec marqueurs **max (▲)** et **min (◆)** + cas gouvernant).
-- 42 TU au vert (22 LI + 20 charges mobiles) ; audits qualité passés.
-- `run.bat` : lance backend + ouvre le frontend. `requirements.txt` + docs à jour.
+- Moteur `engine/` : `compute_influence_line(...)` (LM auto, agnostique aux unités)
+  + `vehicle_loads.py` (HL-93) + `distributed_loads.py` (DC/DW : `effet = w·∫η`).
+- **Charges réparties DC/DW** : `integrate_il` (∫η, ∫η⁺, ∫η⁻ + zones), `distributed_effect`
+  (full/max/min décomposé DC/DW), `distributed_envelope` (balayage des sections → moment
+  max mi-travée/appui, effort tranchant max). Non factorisé ; le signe de la LI donne la
+  pire config (pas de force brute). Cf. 04 R8 / 05 D8.
+- **Bi-unités SI/US** : deux jeux AASHTO officiels, aucune conversion numérique.
+- Backend FastAPI : `/health`, `/influence-line`, `/vehicles?unit_system`,
+  `/vehicle-envelope`, `/distributed-effect`, `/distributed-envelope`. Unité d'effet
+  dérivée (kN/kip, kN·m/kip·ft) ; discrimination 422 (validation) vs 400 (métier).
+- Frontend : toggle **SI/US** ; libellés via l'API ; panneau véhicule (flèches, balayage
+  max ▲/min ◆) ; **panneau charge répartie** (DC/DW, effet live, ombrage des zones
+  chargées, enveloppe avec points mi-travée ▲ / appui ◆) ; export CSV avec unité.
+- **89 TU au vert** (65 + 24 : charges réparties moteur + API) ; audit qualité passé.
 
 ## Validé numériquement
-- LI : somme réactions=1 ; saut V unitaire ; saut de pente M unitaire ; zéros aux appuis.
-- Charges : effet essieu unique = P·η·1.33 ; math JS (live) = moteur Python (écart 0).
-- Bug corrigé : balayage sur LI d'effort tranchant (côté défavorable de la coupure).
-- Bug corrigé : graphes Chart.js qui grossissaient à l'infini (conteneur `.chart-box`
-  à hauteur fixe ; responsive + maintainAspectRatio:false).
+- LI : somme réactions=1 ; saut V unitaire ; saut de pente M ; zéros aux appuis.
+- Charges mobiles : effet essieu unique = P·η·1.33 (SI/US) ; pipeline US exact.
+- Charges réparties : `∫η⁺+∫η⁻=∫η` ; moment mi-travée travée simple = `w·L²/8` ;
+  intégrale exacte == référence numérique fine ; équivalence live-JS == moteur (diff 0).
 
 ## Limites connues
-- Charge de voie répartie (9.3 kN/m) non incluse (choix). Pas d'enveloppe combinée
-  camion+voie. Réaction d'une travée simple = mécanisme → erreur explicite.
-- US (ft/kip) non implémenté : seul le SI est actif.
+- Charge de voie répartie (9.3 kN/m) non incluse (choix). Réaction travée simple =
+  mécanisme → erreur explicite.
+- **Dette** : équivalence live-JS = moteur vérifiée pour les charges réparties ; reste à
+  couvrir pour l'effet véhicule HL-93.
 
 ## Lancer
-- `run.bat`  (ou `uvicorn backend.main:app --reload` + ouvrir `frontend/index.html`)
+- `run.bat` (ou `uvicorn backend.main:app --reload` + ouvrir `frontend/index.html`)
 - `pytest tests/`
