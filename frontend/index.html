@@ -3,151 +3,253 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lignes d'influence — poutre continue</title>
+  <title>Ponts à poutres — lignes d'influence &amp; tablier</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
   <header>
-    <h1>Lignes d'influence — poutre continue</h1>
-    <p class="sub">Méthode de Müller-Breslau · méthode matricielle des déplacements</p>
+    <h1>Ponts à poutres — analyse AASHTO</h1>
+    <p class="sub">Müller-Breslau · méthode matricielle · bande équivalente</p>
   </header>
 
+  <div class="topbar">
+    <label>
+      Système d'unités
+      <select id="unit-system">
+        <option value="SI">SI (m, kN)</option>
+        <option value="US">US (ft, kip)</option>
+      </select>
+    </label>
+    <label class="grow">
+      URL de l'API
+      <input id="api" type="text" value="http://127.0.0.1:8000" />
+    </label>
+  </div>
+
+  <nav class="tabs">
+    <button type="button" class="tab active" data-tab="poutre">Poutre longitudinale</button>
+    <button type="button" class="tab" data-tab="dalle">Tablier (dalle)</button>
+  </nav>
+
   <main>
-    <section class="panel">
-      <form id="form">
-        <label>
-          Système d'unités
-          <select id="unit-system">
-            <option value="SI">SI (m, kN)</option>
-            <option value="US">US (ft, kip)</option>
-          </select>
-        </label>
+    <!-- ===================== ONGLET POUTRE LONGITUDINALE ===================== -->
+    <section id="tab-poutre" class="tabpane active">
+      <div class="col-inputs">
+        <section class="panel">
+          <h2>Données</h2>
+          <form id="form">
+            <label>
+              Travées (<span class="ulen">m</span>, séparées par des virgules)
+              <input id="spans" type="text" value="15, 10, 15" />
+            </label>
 
-        <label>
-          Travées (<span class="ulen">m</span>, séparées par des virgules)
-          <input id="spans" type="text" value="15, 10, 15" />
-        </label>
+            <label>
+              Appuis explicites (<span class="ulen">m</span>, optionnel)
+              <input id="supports" type="text" placeholder="déduits des travées" />
+            </label>
 
-        <label>
-          Appuis explicites (<span class="ulen">m</span>, optionnel)
-          <input id="supports" type="text" placeholder="déduits des travées" />
-        </label>
+            <label>
+              Grandeur
+              <select id="quantity">
+                <option value="R">Réaction d'appui (R)</option>
+                <option value="M">Moment fléchissant (M)</option>
+                <option value="V">Effort tranchant (V)</option>
+              </select>
+            </label>
 
-        <label>
-          Grandeur
-          <select id="quantity">
-            <option value="R">Réaction d'appui (R)</option>
-            <option value="M">Moment fléchissant (M)</option>
-            <option value="V">Effort tranchant (V)</option>
-          </select>
-        </label>
+            <label>
+              Position de la grandeur x (<span class="ulen">m</span>)
+              <input id="target_x" type="number" value="0" step="any" />
+            </label>
 
-        <label>
-          Position de la grandeur x (<span class="ulen">m</span>)
-          <input id="target_x" type="number" value="0" step="any" />
-        </label>
+            <label>
+              Discrétisation dx (<span class="ulen">m</span>)
+              <input id="dx" type="number" value="1" min="0.05" step="any" />
+            </label>
 
-        <label>
-          Discrétisation dx (<span class="ulen">m</span>)
-          <input id="dx" type="number" value="1" min="0.05" step="any" />
-        </label>
+            <p class="hint">
+              Changer de système réinitialise les champs aux valeurs par défaut.
+            </p>
 
-        <p class="hint">
-          Unités : <span id="unit-hint">SI (longueurs en m, charges en kN)</span>.
-          Changer de système réinitialise les champs aux valeurs par défaut.
-        </p>
+            <button type="submit">Calculer</button>
+            <button type="button" id="export" disabled>Exporter CSV</button>
+          </form>
+          <p id="error" class="error"></p>
+          <p id="info" class="info"></p>
+        </section>
 
-        <label>
-          URL de l'API
-          <input id="api" type="text" value="http://127.0.0.1:8000" />
-        </label>
+        <section class="panel" id="vehicle-panel" hidden>
+          <h2>Charges mobiles HL-93 (AASHTO LRFD)</h2>
 
-        <button type="submit">Calculer</button>
-        <button type="button" id="export" disabled>Exporter CSV</button>
-      </form>
-      <p id="error" class="error"></p>
-      <p id="info" class="info"></p>
-    </section>
+          <label>
+            Type de véhicule
+            <select id="vehicle">
+              <option value="truck" id="opt-truck">Camion de calcul (35 / 145 / 145 kN)</option>
+              <option value="tandem" id="opt-tandem">Tandem (110 / 110 kN)</option>
+            </select>
+          </label>
 
-    <section class="panel chart-panel">
-      <div class="chart-box"><canvas id="chart"></canvas></div>
-    </section>
+          <label id="rear-spacing-label">
+            Espacement des essieux arrière :
+            <span id="rear-spacing-val">4.3</span> <span class="ulen">m</span>
+            <input id="rear-spacing" type="range" min="4.3" max="9.0" step="0.1" value="4.3" />
+          </label>
 
-    <section class="panel" id="vehicle-panel" hidden>
-      <h2>Véhicule de référence HL-93 (AASHTO LRFD)</h2>
+          <label class="check">
+            <input id="impact" type="checkbox" checked />
+            Majoration dynamique IM = 33 %
+          </label>
 
-      <label>
-        Type de véhicule
-        <select id="vehicle">
-          <option value="truck" id="opt-truck">Camion de calcul (35 / 145 / 145 kN)</option>
-          <option value="tandem" id="opt-tandem">Tandem (110 / 110 kN)</option>
-        </select>
-      </label>
+          <label>
+            Position de l'essieu de tête :
+            <span id="lead-val">0.0</span> <span class="ulen">m</span>
+            <input id="lead-pos" type="range" min="0" max="40" step="0.1" value="0" />
+          </label>
 
-      <label id="rear-spacing-label">
-        Espacement des essieux arrière :
-        <span id="rear-spacing-val">4.3</span> <span class="ulen">m</span>
-        <input id="rear-spacing" type="range" min="4.3" max="9.0" step="0.1" value="4.3" />
-      </label>
+          <div class="effect-readout">
+            Effet à cette position : <strong id="effect-val">—</strong>
+          </div>
 
-      <label class="check">
-        <input id="impact" type="checkbox" checked />
-        Majoration dynamique IM = 33 %
-      </label>
+          <button type="button" id="sweep">Balayage automatique → effet maximal</button>
+          <div class="effect-readout max" id="max-readout" hidden></div>
+        </section>
 
-      <label>
-        Position de l'essieu de tête :
-        <span id="lead-val">0.0</span> <span class="ulen">m</span>
-        <input id="lead-pos" type="range" min="0" max="40" step="0.1" value="0" />
-      </label>
+        <section class="panel" id="distributed-panel" hidden>
+          <h2>Charges réparties DC / DW</h2>
 
-      <div class="effect-readout">
-        Effet à cette position : <strong id="effect-val">—</strong>
+          <label>
+            Charge DC (poids propre) — <span class="uload">kN/m</span>
+            <input id="w-dc" type="number" min="0" step="any" value="10" />
+          </label>
+
+          <label>
+            Charge DW (revêtement) — <span class="uload">kN/m</span>
+            <input id="w-dw" type="number" min="0" step="any" value="3" />
+          </label>
+
+          <label>
+            Configuration de chargement
+            <select id="dist-view">
+              <option value="alterne">Chargement alterné défavorable (max / min)</option>
+              <option value="permanent">Toute la poutre (charge permanente)</option>
+            </select>
+          </label>
+
+          <div class="effect-readout">
+            Effet à cette configuration : <strong id="dist-effect-val">—</strong>
+          </div>
+
+          <button type="button" id="dist-sweep">Lignes d'enveloppe → moment (M) et effort tranchant (V)</button>
+          <button type="button" id="dist-export" disabled>Exporter les enveloppes CSV</button>
+          <div class="effect-readout max" id="dist-max-readout" hidden></div>
+        </section>
       </div>
 
-      <button type="button" id="sweep">Balayage automatique → effet maximal</button>
-      <div class="effect-readout max" id="max-readout" hidden></div>
+      <div class="col-outputs">
+        <section class="panel chart-panel">
+          <h2>Ligne d'influence</h2>
+          <div class="chart-box"><canvas id="chart"></canvas></div>
+        </section>
+
+        <section class="panel chart-panel" id="envelope-panel" hidden>
+          <h2>Effet en fonction de la position du véhicule</h2>
+          <div class="chart-box"><canvas id="envelope-chart"></canvas></div>
+        </section>
+
+        <section class="panel chart-panel" id="dist-envelope-panel" hidden>
+          <h2>Ligne d'enveloppe — moment fléchissant (M)</h2>
+          <div class="chart-box"><canvas id="dist-envelope-chart"></canvas></div>
+        </section>
+
+        <section class="panel chart-panel" id="dist-shear-panel" hidden>
+          <h2>Ligne d'enveloppe — effort tranchant (V)</h2>
+          <div class="chart-box"><canvas id="dist-shear-chart"></canvas></div>
+        </section>
+      </div>
     </section>
 
-    <section class="panel chart-panel" id="envelope-panel" hidden>
-      <h2>Effet en fonction de la position du véhicule</h2>
-      <div class="chart-box"><canvas id="envelope-chart"></canvas></div>
-    </section>
+    <!-- ========================= ONGLET TABLIER (DALLE) ========================= -->
+    <section id="tab-dalle" class="tabpane" hidden>
+      <div class="col-inputs">
+        <section class="panel">
+          <h2>Géométrie de la dalle</h2>
+          <form id="deck-form">
+            <label>
+              Nombre de longerons
+              <input id="deck-n" type="number" min="2" step="1" value="6" />
+            </label>
+            <label>
+              Entraxe S des longerons (<span class="ulen">m</span>)
+              <input id="deck-s" type="number" min="0.1" step="any" value="8" />
+            </label>
+            <label>
+              Porte-à-faux (<span class="ulen">m</span>)
+              <input id="deck-oh" type="number" min="0" step="any" value="3.25" />
+            </label>
+            <label>
+              Discrétisation transversale dx (<span class="ulen">m</span>)
+              <input id="deck-dx" type="number" min="0.01" step="any" value="0.25" />
+            </label>
 
-    <section class="panel" id="distributed-panel" hidden>
-      <h2>Charge répartie permanente (DC poids propre / DW revêtement)</h2>
+            <h2>Charges permanentes</h2>
+            <label>
+              DC dalle (poids propre) — <span class="uload">kN/m</span>
+              <input id="deck-wdc" type="number" min="0" step="any" value="0.15" />
+            </label>
+            <label>
+              DW revêtement — <span class="uload">kN/m</span>
+              <input id="deck-wdw" type="number" min="0" step="any" value="0.025" />
+            </label>
 
-      <label>
-        Charge DC (poids propre) — <span class="uload">kN/m</span>
-        <input id="w-dc" type="number" min="0" step="any" value="10" />
-      </label>
+            <h2>Charge vive (roue HL-93)</h2>
+            <p class="hint" id="deck-wheel-info">Roue de calcul : —</p>
+            <label class="check">
+              <input id="deck-im" type="checkbox" checked />
+              Majoration dynamique IM = 33 %
+            </label>
+            <label>
+              Facteur de présence multiple (MPF)
+              <input id="deck-mpf" type="number" min="0.1" step="0.05" value="1.20" />
+            </label>
 
-      <label>
-        Charge DW (revêtement) — <span class="uload">kN/m</span>
-        <input id="w-dw" type="number" min="0" step="any" value="3" />
-      </label>
+            <h2>Facteurs de charge (Strength I)</h2>
+            <label>
+              γ<sub>DC</sub>
+              <input id="deck-gdc" type="number" min="0.1" step="0.05" value="1.25" />
+            </label>
+            <label>
+              γ<sub>DW</sub>
+              <input id="deck-gdw" type="number" min="0.1" step="0.05" value="1.50" />
+            </label>
+            <label>
+              γ<sub>LL</sub>
+              <input id="deck-gll" type="number" min="0.1" step="0.05" value="1.75" />
+            </label>
 
-      <label>
-        Configuration de chargement
-        <select id="dist-view">
-          <option value="alterne">Chargement alterné défavorable (max / min)</option>
-          <option value="permanent">Toute la poutre (charge permanente)</option>
-        </select>
-      </label>
-
-      <div class="effect-readout">
-        Effet à cette configuration : <strong id="dist-effect-val">—</strong>
+            <button type="submit">Calculer le tablier</button>
+          </form>
+          <p id="deck-error" class="error"></p>
+        </section>
       </div>
 
-      <button type="button" id="dist-sweep">Ligne d'enveloppe → effet max (mi-travée, appui)</button>
-      <button type="button" id="dist-export" disabled>Exporter l'enveloppe CSV</button>
-      <div class="effect-readout max" id="dist-max-readout" hidden></div>
-    </section>
+      <div class="col-outputs">
+        <section class="panel" id="deck-results-panel" hidden>
+          <h2>Moments de calcul (par unité de largeur)</h2>
+          <div class="table-wrap"><table id="deck-table"></table></div>
+          <p class="hint" id="deck-overhang-note"></p>
+        </section>
 
-    <section class="panel chart-panel" id="dist-envelope-panel" hidden>
-      <h2>Ligne d'enveloppe de la charge répartie</h2>
-      <div class="chart-box"><canvas id="dist-envelope-chart"></canvas></div>
+        <section class="panel chart-panel" id="deck-il-pos-panel" hidden>
+          <h2>Ligne d'influence transversale — moment positif (mi-baie)</h2>
+          <div class="chart-box"><canvas id="deck-il-pos"></canvas></div>
+        </section>
+
+        <section class="panel chart-panel" id="deck-il-neg-panel" hidden>
+          <h2>Ligne d'influence transversale — moment négatif (sur longeron)</h2>
+          <div class="chart-box"><canvas id="deck-il-neg"></canvas></div>
+        </section>
+      </div>
     </section>
   </main>
 

@@ -21,6 +21,8 @@ if _ROOT not in sys.path:
 from engine import (  # noqa: E402
     axle_layout,
     compute_influence_line,
+    deck_design,
+    design_wheel,
     distributed_effect,
     distributed_envelope,
     effect_unit,
@@ -29,6 +31,8 @@ from engine import (  # noqa: E402
 )
 
 from .schemas import (  # noqa: E402
+    DeckDesignRequest,
+    DeckDesignResponse,
     DistributedEffectRequest,
     DistributedEffectResponse,
     DistributedEnvelopeResponse,
@@ -168,3 +172,43 @@ def distributed_envelope_route(req: DistributedEffectRequest):
 
     env["unit"] = effect_unit(req.unit_system, req.quantity)
     return env
+
+
+@app.get("/deck-catalog")
+def deck_catalog(unit_system: str = "SI"):
+    """Roue de calcul du tablier (charge, gage, recul, IM) — source de vérité frontend.
+
+    `unit_system` ("SI" | "US") sélectionne la roue HL-93 dérivée et les unités.
+    """
+    try:
+        return design_wheel(unit_system)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/deck-design", response_model=DeckDesignResponse)
+def deck_design_route(req: DeckDesignRequest):
+    """Dimensionne la dalle de tablier par la méthode de la bande équivalente (AASHTO).
+
+    Renvoie, pour 3 sections (positif mi-baie, négatif sur longeron, porte-à-faux), les
+    moments DC, DW, LL+IM (par unité de largeur, via la largeur de bande E) et la
+    combinaison Mu = γ_DC·M_DC + γ_DW·M_DW + γ_LL·(M_LL+IM), facteurs éditables.
+    """
+    try:
+        result = deck_design(
+            n_girders=req.n_girders,
+            spacing=req.spacing,
+            overhang=req.overhang,
+            dx=req.dx,
+            w_dc=req.w_dc,
+            w_dw=req.w_dw,
+            unit_system=req.unit_system,
+            gamma_dc=req.gamma_dc,
+            gamma_dw=req.gamma_dw,
+            gamma_ll=req.gamma_ll,
+            mpf=req.mpf,
+            impact=req.impact,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result

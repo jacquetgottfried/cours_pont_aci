@@ -60,3 +60,22 @@ philosophie « une fonction générique » : on intègre la LI déjà produite p
 Rejeté aussi : la **recherche de configuration par force brute** (essayer toutes les
 combinaisons de travées chargées). Inutile — le **signe de la ligne d'influence** donne
 directement la pire configuration (`∫η⁺` pour le max, `∫η⁻` pour le min).
+
+## D9 — Ligne d'influence à l'appui de rive pour le moment de porte-à-faux (rejeté)
+Calculer le moment de porte-à-faux par une ligne d'influence de M au droit du longeron
+extérieur. Rejeté : insérer une rotule à l'appui de rive rend le porte-à-faux libre de
+tourner (mécanisme) → matrice singulière (la « Limite assumée mécanisme » ci-dessous).
+Or le porte-à-faux est une **console isostatique** : son moment d'encastrement est donné
+exactement par la statique (`M = Σ P·X·(1+IM)` pour les roues, `w·L²/2` pour le poids),
+indépendamment du reste de la poutre continue. C'est aussi la pratique AASHTO. On traite
+donc le porte-à-faux par statique ; seules les sections positive (mi-baie) et négative
+(longeron **intérieur**) passent par la ligne d'influence.
+
+## D10 — Faire connaître `unit_system` au cœur via la dalle (rejeté)
+La dalle a besoin de l'unité (formule de bande US/SI, roue HL-93 par système). Tentation :
+passer `unit_system` à `compute_influence_line`. Rejeté (comme D7) : `engine/deck.py` est
+un **module de bord** au même titre que `vehicle_loads.py`. Il connaît l'unité (formules,
+roue, libellés) et appelle le cœur SANS unité. Le cœur reste agnostique (04 R6/R7) : il
+reçoit une géométrie transversale (en m ou en ft) et renvoie des ordonnées dans la même
+unité. La formule de bande SI étant définie en mm, la conversion m→mm est interne à
+`deck.py` (application d'une formule officielle métrique, pas une conversion de véhicule).

@@ -6,9 +6,11 @@
 const $ = (id) => document.getElementById(id);
 let chart = null;
 let envChart = null;
-let distEnvChart = null; // graphe d'enveloppe de la charge répartie
+let distEnvChart = null; // enveloppe de moment fléchissant (charge répartie)
+let distShearChart = null; // enveloppe d'effort tranchant (charge répartie)
 let lastResult = null; // dernière ligne d'influence {x, y, meta}
-let lastEnvelope = null; // dernière enveloppe de charge répartie (POST /distributed-envelope)
+let lastEnvelopeM = null; // dernière enveloppe de moment (/distributed-envelope, M)
+let lastEnvelopeV = null; // dernière enveloppe d'effort tranchant (/distributed-envelope, V)
 let catalog = null; // catalogue HL-93 (GET /vehicles)
 
 const LABELS = { R: "Réaction", M: "Moment", V: "Effort tranchant" };
@@ -468,8 +470,10 @@ function setupDistributedPanel(data) {
   $("distributed-panel").hidden = false;
   $("dist-max-readout").hidden = true;
   $("dist-envelope-panel").hidden = true;
+  $("dist-shear-panel").hidden = true;
   $("dist-export").disabled = true;
-  lastEnvelope = null;
+  lastEnvelopeM = null;
+  lastEnvelopeV = null;
   updateDistributed();
 }
 
@@ -507,117 +511,153 @@ function updateDistributed() {
   }
 }
 
-async function distributedSweep() {
-  if (!lastResult) return;
-  $("error").textContent = "";
+async function fetchDistributedEnvelope(quantity) {
   const payload = {
     ...buildPayload(),
+    quantity, // l'enveloppe répartie est indépendante de la grandeur affichée
     w_dc: Number($("w-dc").value) || 0,
     w_dw: Number($("w-dw").value) || 0,
   };
+  const resp = await fetch(`${apiBase()}/distributed-envelope`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    const detail =
+      typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+    throw new Error(detail);
+  }
+  return data;
+}
+
+async function distributedSweep() {
+  if (!lastResult) return;
+  $("error").textContent = "";
   try {
-    const resp = await fetch(`${apiBase()}/distributed-envelope`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      const detail =
-        typeof data.detail === "string"
-          ? data.detail
-          : JSON.stringify(data.detail);
-      throw new Error(detail);
-    }
-    lastEnvelope = data;
-    showDistributedEnvelope(data);
+    // Enveloppes de dimensionnement : moment fléchissant (M) ET effort tranchant (V).
+    const [mData, vData] = await Promise.all([
+      fetchDistributedEnvelope("M"),
+      fetchDistributedEnvelope("V"),
+    ]);
+    lastEnvelopeM = mData;
+    lastEnvelopeV = vData;
+    showDistributedEnvelopes(mData, vData);
     $("dist-export").disabled = false;
   } catch (e) {
     $("error").textContent = `Erreur : ${e.message}`;
   }
 }
 
-function showDistributedEnvelope(data) {
-  const u = data.unit;
+function showDistributedEnvelopes(mData, vData) {
   const lu = lengthUnit();
-  const g = data.governing;
   const worst = (pts) =>
-    pts.reduce((a, b) => (Math.abs(b.value) > Math.abs(a.value) ? b : a));
+    pts.length
+      ? pts.reduce((a, b) => (Math.abs(b.value) > Math.abs(a.value) ? b : a))
+      : null;
+  const govLine = (name, d) => {
+    const g = d.governing;
+    return (
+      `${name} — gouvernant : ${g.value.toFixed(2)} ${d.unit} ` +
+      `à x=${g.position.toFixed(2)} ${lu} (chargement ${g.sign > 0 ? "+" : "−"})`
+    );
+  };
 
+  // Synthèse texte : moment (mi-travée / appui) + effort tranchant.
   const ro = $("dist-max-readout");
   ro.hidden = false;
-  const lines = [
-    `Effet gouvernant : ${g.value.toFixed(2)} ${u} à x=${g.position.toFixed(2)} ${lu} ` +
-      `(chargement ${g.sign > 0 ? "+" : "−"})`,
-  ];
-  if (data.midspan_points.length) {
-    const m = worst(data.midspan_points);
+  const lines = [govLine("Moment fléchissant", mData)];
+  const mmid = worst(mData.midspan_points);
+  const msup = worst(mData.support_points);
+  if (mmid)
     lines.push(
-      `Effet max à mi-travée : ${m.value.toFixed(2)} ${u} (x=${m.position.toFixed(2)} ${lu})`
+      `  · max à mi-travée : ${mmid.value.toFixed(2)} ${mData.unit} ` +
+        `(x=${mmid.position.toFixed(2)} ${lu})`
     );
-  }
-  if (data.support_points.length) {
-    const s = worst(data.support_points);
+  if (msup)
     lines.push(
-      `Effet max sur appui : ${s.value.toFixed(2)} ${u} (x=${s.position.toFixed(2)} ${lu})`
+      `  · max sur appui : ${msup.value.toFixed(2)} ${mData.unit} ` +
+        `(x=${msup.position.toFixed(2)} ${lu})`
     );
-  }
+  lines.push(govLine("Effort tranchant", vData));
   ro.textContent = lines.join("\n");
 
+  // Deux graphes : moment (marqueurs mi-travée/appui) et effort tranchant (gouvernant).
   $("dist-envelope-panel").hidden = false;
+  $("dist-shear-panel").hidden = false;
+  distEnvChart = buildEnvelopeChart("dist-envelope-chart", distEnvChart, mData, "moment");
+  distShearChart = buildEnvelopeChart("dist-shear-chart", distShearChart, vData, "shear");
+}
+
+function buildEnvelopeChart(canvasId, prevChart, data, kind) {
+  const u = data.unit;
+  const lu = lengthUnit();
   const series = (arr) => data.positions.map((p, i) => ({ x: p, y: arr[i] }));
   const pts = (list) => list.map((p) => ({ x: p.position, y: p.value }));
+  const datasets = [
+    {
+      label: `Enveloppe max (${u})`,
+      data: series(data.max),
+      borderColor: "#dc2626",
+      backgroundColor: "rgba(220,38,38,0.10)",
+      fill: false,
+      pointRadius: 0,
+      tension: 0,
+    },
+    {
+      label: `Enveloppe min (${u})`,
+      data: series(data.min),
+      borderColor: "#2563eb",
+      backgroundColor: "rgba(37,99,235,0.10)",
+      fill: false,
+      pointRadius: 0,
+      tension: 0,
+    },
+    {
+      label: `Permanent (${u})`,
+      data: series(data.full),
+      borderColor: "#6b7280",
+      borderDash: [6, 4],
+      fill: false,
+      pointRadius: 0,
+      tension: 0,
+    },
+  ];
+  if (kind === "moment") {
+    datasets.push({
+      label: "Max mi-travée",
+      data: pts(data.midspan_points),
+      borderColor: "#dc2626",
+      backgroundColor: "#dc2626",
+      showLine: false,
+      pointStyle: "triangle",
+      pointRadius: 7,
+    });
+    datasets.push({
+      label: "Max sur appui",
+      data: pts(data.support_points),
+      borderColor: "#2563eb",
+      backgroundColor: "#2563eb",
+      showLine: false,
+      pointStyle: "rectRot",
+      pointRadius: 7,
+    });
+  } else {
+    // effort tranchant : on marque le point gouvernant (souvent près d'un appui).
+    datasets.push({
+      label: "Gouvernant",
+      data: [{ x: data.governing.position, y: data.governing.value }],
+      borderColor: "#b45309",
+      backgroundColor: "#b45309",
+      showLine: false,
+      pointStyle: "star",
+      pointRadius: 9,
+    });
+  }
   const cfg = {
     type: "line",
-    data: {
-      datasets: [
-        {
-          label: `Enveloppe max (${u})`,
-          data: series(data.max),
-          borderColor: "#dc2626",
-          backgroundColor: "rgba(220,38,38,0.10)",
-          fill: false,
-          pointRadius: 0,
-          tension: 0,
-        },
-        {
-          label: `Enveloppe min (${u})`,
-          data: series(data.min),
-          borderColor: "#2563eb",
-          backgroundColor: "rgba(37,99,235,0.10)",
-          fill: false,
-          pointRadius: 0,
-          tension: 0,
-        },
-        {
-          label: `Permanent (${u})`,
-          data: series(data.full),
-          borderColor: "#6b7280",
-          borderDash: [6, 4],
-          fill: false,
-          pointRadius: 0,
-          tension: 0,
-        },
-        {
-          label: "Max mi-travée",
-          data: pts(data.midspan_points),
-          borderColor: "#dc2626",
-          backgroundColor: "#dc2626",
-          showLine: false,
-          pointStyle: "triangle",
-          pointRadius: 7,
-        },
-        {
-          label: "Max sur appui",
-          data: pts(data.support_points),
-          borderColor: "#2563eb",
-          backgroundColor: "#2563eb",
-          showLine: false,
-          pointStyle: "rectRot",
-          pointRadius: 7,
-        },
-      ],
-    },
+    data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -632,24 +672,30 @@ function showDistributedEnvelope(data) {
       plugins: { legend: { position: "top" } },
     },
   };
-  if (distEnvChart) distEnvChart.destroy();
-  distEnvChart = new Chart($("dist-envelope-chart"), cfg);
+  if (prevChart) prevChart.destroy();
+  return new Chart($(canvasId), cfg);
 }
 
 function exportDistributedCsv() {
-  if (!lastEnvelope) return;
-  const d = lastEnvelope;
+  if (!lastEnvelopeM || !lastEnvelopeV) return;
+  const m = lastEnvelopeM, v = lastEnvelopeV;
   const u = unitSystem();
   const lu = lengthUnit();
-  const rows = [`x [${lu}],max [${d.unit}],min [${d.unit}],full [${d.unit}]`];
-  d.positions.forEach((p, i) =>
-    rows.push(`${p},${d.max[i]},${d.min[i]},${d.full[i]}`)
+  // M et V partagent les mêmes sections ; un seul CSV avec les deux enveloppes.
+  const rows = [
+    `x [${lu}],M_max [${m.unit}],M_min [${m.unit}],M_full [${m.unit}],` +
+      `V_max [${v.unit}],V_min [${v.unit}],V_full [${v.unit}]`,
+  ];
+  m.positions.forEach((p, i) =>
+    rows.push(
+      `${p},${m.max[i]},${m.min[i]},${m.full[i]},${v.max[i]},${v.min[i]},${v.full[i]}`
+    )
   );
   const blob = new Blob([rows.join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `ENV_${d.quantity}_${u}.csv`;
+  a.download = `ENV_DC_DW_${u}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -731,11 +777,204 @@ async function onUnitSystemChange() {
   $("quantity").value = "R";
   $("w-dc").value = d.w_dc;
   $("w-dw").value = d.w_dw;
+  // Dalle : réinitialiser aussi aux défauts du système (pas de conversion, cf. D6).
+  const dd = DECK_DEFAULTS[unitSystem()];
+  $("deck-s").value = dd.s;
+  $("deck-oh").value = dd.oh;
+  $("deck-dx").value = dd.dx;
+  $("deck-wdc").value = dd.wdc;
+  $("deck-wdw").value = dd.wdw;
   catalog = null; // forcer le rechargement avec la nouvelle unité
+  deckCatalog = null;
   await loadCatalog();
+  await loadDeckCatalog();
   compute();
 }
 
+// --------------------------------------------------------------------------- //
+// Onglet « Tablier (dalle) » — méthode de la bande équivalente (AASHTO)
+// --------------------------------------------------------------------------- //
+let deckCatalog = null; // GET /deck-catalog (roue de calcul du tablier)
+let deckIlPosChart = null;
+let deckIlNegChart = null;
+
+const DECK_DEFAULTS = {
+  SI: { s: "2.4", oh: "1.0", dx: "0.1", wdc: "7.0", wdw: "1.2" },
+  US: { s: "8", oh: "3.25", dx: "0.25", wdc: "0.15", wdw: "0.025" },
+};
+
+// Largeur de bande E : unité réglementaire (pouces en US, mm en SI), pas l'unité système.
+const stripUnit = () => (unitSystem() === "US" ? "in" : "mm");
+
+async function loadDeckCatalog() {
+  try {
+    const resp = await fetch(
+      `${apiBase()}/deck-catalog?unit_system=${encodeURIComponent(unitSystem())}`
+    );
+    if (resp.ok) deckCatalog = await resp.json();
+  } catch (e) {
+    // backend pas encore lancé : rechargé au 1er calcul
+  }
+  applyDeckLabels();
+}
+
+function applyDeckLabels() {
+  if (!deckCatalog) return;
+  const c = deckCatalog;
+  $("deck-wheel-info").textContent =
+    `Roue de calcul : P = ${c.P} ${c.force_unit} · gage = ${c.gage} ${c.length_unit}` +
+    ` · recul au bord ${c.edge_offset} ${c.length_unit}`;
+}
+
+async function computeDeck(evt) {
+  if (evt) evt.preventDefault();
+  $("deck-error").textContent = "";
+  const payload = {
+    n_girders: Number($("deck-n").value),
+    spacing: Number($("deck-s").value),
+    overhang: Number($("deck-oh").value),
+    dx: Number($("deck-dx").value),
+    w_dc: Number($("deck-wdc").value) || 0,
+    w_dw: Number($("deck-wdw").value) || 0,
+    gamma_dc: Number($("deck-gdc").value),
+    gamma_dw: Number($("deck-gdw").value),
+    gamma_ll: Number($("deck-gll").value),
+    mpf: Number($("deck-mpf").value),
+    impact: $("deck-im").checked,
+    unit_system: unitSystem(),
+  };
+  try {
+    const resp = await fetch(`${apiBase()}/deck-design`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      const detail =
+        typeof data.detail === "string"
+          ? data.detail
+          : JSON.stringify(data.detail);
+      throw new Error(detail);
+    }
+    renderDeckTable(data);
+    deckIlPosChart = drawDeckILChart(
+      "deck-il-pos", "deck-il-pos-panel", deckIlPosChart,
+      data.influence_lines.positive, "moment positif"
+    );
+    deckIlNegChart = drawDeckILChart(
+      "deck-il-neg", "deck-il-neg-panel", deckIlNegChart,
+      data.influence_lines.negative, "moment négatif"
+    );
+  } catch (e) {
+    $("deck-error").textContent = `Erreur : ${e.message}`;
+  }
+}
+
+function renderDeckTable(data) {
+  const s = data.sections;
+  const ue = data.unit_line; // kN·m/m | kip·ft/ft
+  const su = stripUnit(); // in | mm
+  const f = (v) => v.toFixed(2);
+  const rows = [
+    ["Positif (mi-baie)", s.positive],
+    ["Négatif (sur longeron)", s.negative],
+    ["Porte-à-faux", s.overhang],
+  ];
+  let html =
+    `<thead><tr><th>Section</th><th>M<sub>DC</sub> (${ue})</th>` +
+    `<th>M<sub>DW</sub> (${ue})</th><th>M<sub>LL+IM</sub> (${ue})</th>` +
+    `<th>E (${su})</th><th>M<sub>u</sub> (${ue})</th></tr></thead><tbody>`;
+  for (const [label, sec] of rows) {
+    html +=
+      `<tr><td>${label}</td><td>${f(sec.M_DC)}</td><td>${f(sec.M_DW)}</td>` +
+      `<td>${f(sec.M_LL)}</td><td>${f(sec.E)}</td>` +
+      `<td class="mu">${f(sec.Mu)}</td></tr>`;
+  }
+  $("deck-table").innerHTML = html + "</tbody>";
+  $("deck-results-panel").hidden = false;
+
+  const oh = s.overhang;
+  const lu = lengthUnit();
+  $("deck-overhang-note").textContent =
+    `Porte-à-faux : console isostatique (sans ligne d'influence). ` +
+    `M_bande = ${oh.M_strip.toFixed(2)} ${data.unit_effort} ` +
+    `(roue à X = ${oh.X.toFixed(2)} ${lu}, E = ${oh.E.toFixed(1)} ${su}).`;
+}
+
+function drawDeckILChart(canvasId, panelId, prevChart, il, label) {
+  $(panelId).hidden = false;
+  const lu = lengthUnit();
+  const points = il.x.map((xv, i) => ({ x: xv, y: il.y[i] }));
+  const supports = il.support_positions.map((sx) => ({ x: sx, y: 0 }));
+  const cfg = {
+    type: "line",
+    data: {
+      datasets: [
+        {
+          label: `LI ${label}`,
+          data: points,
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37,99,235,0.15)",
+          fill: true,
+          pointRadius: 0,
+          tension: 0,
+        },
+        {
+          label: "Longerons",
+          data: supports,
+          borderColor: "#b91c1c",
+          backgroundColor: "#b91c1c",
+          showLine: false,
+          pointStyle: "triangle",
+          pointRadius: 8,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: {
+          type: "linear",
+          title: { display: true, text: `Position transversale [${lu}]` },
+        },
+        y: { title: { display: true, text: "LI M(x)" } },
+      },
+      plugins: { legend: { position: "top" } },
+    },
+    plugins: [axleArrowPlugin, loadedZonesPlugin],
+  };
+  if (prevChart) prevChart.destroy();
+  const chart = new Chart($(canvasId), cfg);
+  chart.$axles = il.wheels; // roues placées au cas gouvernant
+  chart.$loadedZones = il.dead_zones.map((r) => ({
+    range: r,
+    color: "rgba(5,150,105,0.12)",
+  }));
+  chart.update("none");
+  return chart;
+}
+
+// --------------------------------------------------------------------------- //
+// Onglets
+// --------------------------------------------------------------------------- //
+function activateTab(name) {
+  document.querySelectorAll(".tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === name)
+  );
+  document.querySelectorAll(".tabpane").forEach((p) => {
+    const on = p.id === `tab-${name}`;
+    p.classList.toggle("active", on);
+    p.hidden = !on;
+  });
+  if (name === "dalle" && !deckCatalog) loadDeckCatalog();
+}
+
+// --------------------------------------------------------------------------- //
+// Écouteurs
+// --------------------------------------------------------------------------- //
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!catalog) await loadCatalog();
@@ -756,5 +995,9 @@ $("w-dw").addEventListener("input", updateDistributed);
 $("dist-view").addEventListener("change", updateDistributed);
 $("dist-sweep").addEventListener("click", distributedSweep);
 $("dist-export").addEventListener("click", exportDistributedCsv);
+$("deck-form").addEventListener("submit", computeDeck);
+document.querySelectorAll(".tab").forEach((b) =>
+  b.addEventListener("click", () => activateTab(b.dataset.tab))
+);
 
 loadCatalog();

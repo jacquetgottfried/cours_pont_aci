@@ -5,35 +5,32 @@
 
 # État actuel
 
-Branche : `refactor/ui-support`. **App 3 couches + HL-93 + charges réparties DC/DW + SI/US.**
+Branche : `refactor/ui-support`. **Poutre longitudinale + Tablier (dalle), UI à 2 onglets.**
 
 ## Fait
-- Moteur `engine/` : `compute_influence_line(...)` (LM auto, agnostique aux unités)
-  + `vehicle_loads.py` (HL-93) + `distributed_loads.py` (DC/DW : `effet = w·∫η`).
-- **Charges réparties DC/DW** : `integrate_il` (∫η, ∫η⁺, ∫η⁻ + zones), `distributed_effect`
-  (full/max/min décomposé DC/DW), `distributed_envelope` (balayage des sections → moment
-  max mi-travée/appui, effort tranchant max). Non factorisé ; le signe de la LI donne la
-  pire config (pas de force brute). Cf. 04 R8 / 05 D8.
-- **Bi-unités SI/US** : deux jeux AASHTO officiels, aucune conversion numérique.
-- Backend FastAPI : `/health`, `/influence-line`, `/vehicles?unit_system`,
-  `/vehicle-envelope`, `/distributed-effect`, `/distributed-envelope`. Unité d'effet
-  dérivée (kN/kip, kN·m/kip·ft) ; discrimination 422 (validation) vs 400 (métier).
-- Frontend : toggle **SI/US** ; libellés via l'API ; panneau véhicule (flèches, balayage
-  max ▲/min ◆) ; **panneau charge répartie** (DC/DW, effet live, ombrage des zones
-  chargées, enveloppe avec points mi-travée ▲ / appui ◆) ; export CSV avec unité.
-- **89 TU au vert** (65 + 24 : charges réparties moteur + API) ; audit qualité passé.
+- Moteur `engine/` : `compute_influence_line` (agnostique) + `vehicle_loads` (HL-93) +
+  `distributed_loads` (DC/DW : `effet=w·∫η`, enveloppes M & V) + `deck` (dalle).
+- **Tablier (dalle)** — `deck.py`, méthode de la **bande équivalente** AASHTO : poutre
+  transversale sur les longerons. 3 sections : positif (mi-baie, IL), négatif (longeron
+  intérieur, IL), porte-à-faux (**statique**, car l'IL de l'appui de rive = mécanisme).
+  `m_LL = MPF·M_bande/E` (E US in / SI mm) ; DC/DW + combinaison `Mu = γ·M` à facteurs
+  **éditables**. Roue = essieu HL-93/2. SI+US. Cf. 04 R9 / 05 D9-D10.
+- Backend FastAPI : + `GET /deck-catalog`, `POST /deck-design` (en plus de l'existant).
+- Frontend : **UI refonte à onglets** « Poutre longitudinale » | « Tablier » (bascule
+  SI/US partagée, 2 colonnes entrées|sorties). Onglet dalle : tableau des moments (3
+  sections × DC/DW/LL+IM/E/Mu) + 2 IL transversales (roues placées, zones DC/DW ombrées).
+- **120 TU au vert** (92 + 28 : dalle moteur + API) ; audit qualité OK.
 
 ## Validé numériquement
 - LI : somme réactions=1 ; saut V unitaire ; saut de pente M ; zéros aux appuis.
-- Charges mobiles : effet essieu unique = P·η·1.33 (SI/US) ; pipeline US exact.
-- Charges réparties : `∫η⁺+∫η⁻=∫η` ; moment mi-travée travée simple = `w·L²/8` ;
-  intégrale exacte == référence numérique fine ; équivalence live-JS == moteur (diff 0).
+- Charges réparties : `∫η⁺+∫η⁻=∫η` ; mi-travée travée simple = `w·L²/8` ; live-JS == moteur.
+- Dalle : porte-à-faux `M=P·X·(1+IM)` exact ; symétrie M⁻ ; E AASHTO US/SI ; `Mu=Σγ·M` ;
+  échantillon US (M⁻≈-30.9, M⁺≈+24.6, porte-à-faux≈47.9 ; E 78.8/72/67.5 in).
 
 ## Limites connues
-- Charge de voie répartie (9.3 kN/m) non incluse (choix). Réaction travée simple =
-  mécanisme → erreur explicite.
-- **Dette** : équivalence live-JS = moteur vérifiée pour les charges réparties ; reste à
-  couvrir pour l'effet véhicule HL-93.
+- Charge de voie répartie (9.3 kN/m) non incluse (choix). Mécanisme (réaction travée
+  simple, IL appui de rive du porte-à-faux) → erreur explicite / traité par statique.
+- **Dette** : équivalence live-JS = moteur couverte (réparties) ; pas pour le véhicule HL-93.
 
 ## Lancer
 - `run.bat` (ou `uvicorn backend.main:app --reload` + ouvrir `frontend/index.html`)

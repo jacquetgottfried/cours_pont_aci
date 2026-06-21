@@ -273,3 +273,138 @@ class DistributedEnvelopeResponse(BaseModel):
     w_dc: float
     w_dw: float
     unit: str = Field(..., description="Unité de l'effet.")
+
+
+# --------------------------------------------------------------------------- #
+# Dalle de tablier — méthode de la bande équivalente (AASHTO)
+# --------------------------------------------------------------------------- #
+class DeckDesignRequest(BaseModel):
+    """Paramètres du dimensionnement de la dalle (poutre transversale + bande)."""
+
+    n_girders: int = Field(6, ge=2, description="Nombre de longerons (appuis).")
+    spacing: float = Field(..., gt=0, description="Entraxe des longerons S (m | ft).")
+    overhang: float = Field(..., ge=0, description="Largeur du porte-à-faux (m | ft).")
+    dx: float = Field(..., gt=0, description="Discrétisation transversale (m | ft).")
+    w_dc: float = Field(
+        0.0, ge=0, description="Charge permanente dalle DC (kN/m | kip/ft)."
+    )
+    w_dw: float = Field(
+        0.0, ge=0, description="Charge de revêtement DW (kN/m | kip/ft)."
+    )
+    gamma_dc: float = Field(1.25, gt=0, description="Facteur de charge DC.")
+    gamma_dw: float = Field(1.50, gt=0, description="Facteur de charge DW.")
+    gamma_ll: float = Field(1.75, gt=0, description="Facteur de charge LL+IM.")
+    mpf: float = Field(1.20, gt=0, description="Facteur de présence multiple.")
+    impact: bool = Field(True, description="Majoration dynamique IM=33 %.")
+    unit_system: str = Field(
+        "SI", description="Système d'unités : 'SI' (m, kN) ou 'US' (ft, kip)."
+    )
+
+    @field_validator("unit_system")
+    @classmethod
+    def _check_unit_system(cls, v: str) -> str:
+        if v not in UNIT_SYSTEMS:
+            raise ValueError(
+                f"unit_system doit être dans {UNIT_SYSTEMS}, reçu {v!r}."
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _check_loads(self) -> "DeckDesignRequest":
+        if self.w_dc <= 0 and self.w_dw <= 0:
+            raise ValueError(
+                "Au moins une des charges w_dc / w_dw doit être strictement positive."
+            )
+        return self
+
+
+class DeckGeometry(BaseModel):
+    total: float
+    girders: List[float]
+    overhang: float
+    spacing: float
+    n_girders: int
+    dx: float
+
+
+class DeckWheel(BaseModel):
+    P: float
+    gage: float
+    edge_offset: float
+    im: float
+
+
+class DeckFactors(BaseModel):
+    gamma_dc: float
+    gamma_dw: float
+    gamma_ll: float
+    mpf: float
+
+
+class DeckSection(BaseModel):
+    """Moments d'une section sur ligne d'influence (positif ou négatif)."""
+
+    M_DC: float
+    M_DW: float
+    M_LL: float = Field(..., description="Moment de charge vive par unité de largeur.")
+    M_strip: float = Field(..., description="Moment de la bande (roues, avec IM).")
+    E: float = Field(..., description="Largeur de bande brute (in en US, mm en SI).")
+    E_length: float = Field(..., description="Largeur de bande en unité système (ft|m).")
+    Mu: float = Field(..., description="Combinaison Strength I (γ·M).")
+    target_x: float
+
+
+class DeckOverhangWheel(BaseModel):
+    x: float
+    X: float
+    P: float
+
+
+class DeckOverhangSection(BaseModel):
+    """Moments du porte-à-faux (console, statique)."""
+
+    M_DC: float
+    M_DW: float
+    M_LL: float
+    M_strip: float
+    E: float
+    E_length: float
+    Mu: float
+    X: float = Field(..., description="Bras de levier de la roue de rive.")
+    wheels: List[DeckOverhangWheel]
+
+
+class DeckSections(BaseModel):
+    positive: DeckSection
+    negative: DeckSection
+    overhang: DeckOverhangSection
+
+
+class DeckILView(BaseModel):
+    """Ligne d'influence transversale pour l'affichage (avec roues et zones DC/DW)."""
+
+    x: List[float]
+    y: List[float]
+    target_x: float
+    support_positions: List[float]
+    wheels: List[AxlePosition]
+    dead_zones: List[List[float]]
+
+
+class DeckILViews(BaseModel):
+    positive: DeckILView
+    negative: DeckILView
+
+
+class DeckDesignResponse(BaseModel):
+    """Résultat du dimensionnement de la dalle (3 sections + IL transversales)."""
+
+    geometry: DeckGeometry
+    wheel: DeckWheel
+    factors: DeckFactors
+    sections: DeckSections
+    influence_lines: DeckILViews
+    unit_effort: str = Field(..., description="Unité de moment (kN·m | kip·ft).")
+    unit_line: str = Field(
+        ..., description="Unité de moment par largeur (kN·m/m | kip·ft/ft)."
+    )

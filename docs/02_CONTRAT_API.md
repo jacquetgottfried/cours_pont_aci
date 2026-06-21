@@ -12,7 +12,8 @@ Base : `http://127.0.0.1:8000` · Documentation interactive : `/docs`.
 - Réponse 200 : `{"status": "ok"}`
 
 Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-envelope`,
-`POST /distributed-effect`, `POST /distributed-envelope`.
+`POST /distributed-effect`, `POST /distributed-envelope`, `GET /deck-catalog`,
+`POST /deck-design`.
 
 ## POST /influence-line — calcule une ligne d'influence
 - Payload (JSON) :
@@ -144,3 +145,55 @@ Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-
   `midspan_points` = moment max à mi-travée ; `support_points` = moment max sur appui
   intérieur (poutre continue : souvent gouvernant). `sign` = +1 / -1 du gouvernant.
 - Erreurs : `400` (métier), `422` (idem `/distributed-effect`).
+
+## GET /deck-catalog — roue de calcul du tablier (bande équivalente)
+- Query : `unit_system` = `"SI"` (défaut) | `"US"`. Roue HL-93 dérivée (essieu arrière/2).
+- Réponse 200 :
+  ```json
+  // GET /deck-catalog?unit_system=US
+  {"P":16.0, "gage":6.0, "edge_offset":1.0, "im":0.33,
+   "force_unit":"kip", "length_unit":"ft"}
+  // SI : P 72.5 kN, gage 1.8 m, edge_offset 0.3 m.
+  ```
+- Erreur : `400` si `unit_system` inconnu.
+
+## POST /deck-design — dimensionnement de la dalle (méthode de la bande équivalente)
+- La dalle est une poutre continue transversale sur les longerons (cf. 04 R9).
+- Payload (JSON) :
+  ```json
+  {
+    "n_girders": 6,        // nb de longerons (≥2)
+    "spacing": 8,          // entraxe S (ft | m), >0
+    "overhang": 3.25,      // porte-à-faux (ft | m), ≥0
+    "dx": 0.25,            // discrétisation transversale ; doit diviser la grille
+    "w_dc": 0.15,          // DC dalle (kip/ft | kN/m), ≥0
+    "w_dw": 0.025,         // DW revêtement, ≥0 ; au moins une des deux > 0
+    "gamma_dc": 1.25, "gamma_dw": 1.50, "gamma_ll": 1.75,  // facteurs éditables
+    "mpf": 1.20,           // facteur de présence multiple
+    "impact": true,        // IM = 33 %
+    "unit_system": "US"
+  }
+  ```
+- Réponse 200 :
+  ```json
+  {
+    "geometry": {"total":46.5,"girders":[...],"overhang":3.25,"spacing":8,"n_girders":6,"dx":0.25},
+    "wheel": {"P":16.0,"gage":6.0,"edge_offset":1.0,"im":0.33},
+    "factors": {"gamma_dc":1.25,"gamma_dw":1.50,"gamma_ll":1.75,"mpf":1.20},
+    "sections": {
+      "positive": {"M_DC":...,"M_DW":...,"M_LL":...,"M_strip":...,"E":78.8,"E_length":...,"Mu":...,"target_x":...},
+      "negative": {... "target_x": longeron intérieur ...},
+      "overhang": {... "X":2.25, "wheels":[{"x","X","P"}] ...}   // statique, sans IL
+    },
+    "influence_lines": {
+      "positive": {"x":[...],"y":[...],"target_x":...,"support_positions":[...],
+                   "wheels":[{"x","load"}],"dead_zones":[[x0,x1]]},
+      "negative": {... idem ...}
+    },
+    "unit_effort": "kip·ft", "unit_line": "kip·ft/ft"
+  }
+  ```
+  `M_DC/M_DW/M_LL/Mu` sont par unité de largeur (`unit_line`). `E` est la largeur de bande
+  brute (pouces en US, mm en SI). `M_strip` = moment de la bande (roues, avec IM).
+- Erreurs : `400` (métier : `dx` hors grille, géométrie incohérente), `422` (deux charges
+  nulles, `n_girders<2`, facteur ≤ 0, `unit_system` invalide).

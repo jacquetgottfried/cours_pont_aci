@@ -11,6 +11,16 @@ from .distributed_loads import (
     distributed_envelope,
     integrate_il,
 )
+from .deck import (
+    deck_design,
+    deck_geometry,
+    design_wheel,
+    effect_unit_per_width,
+    overhang_dead_moment,
+    overhang_live_moment,
+    strip_length,
+    strip_width,
+)
 from .vehicle_loads import (
     axle_layout,
     effect_unit,
@@ -30,6 +40,14 @@ __all__ = [
     "distributed_effect",
     "distributed_envelope",
     "integrate_il",
+    "deck_design",
+    "deck_geometry",
+    "design_wheel",
+    "effect_unit_per_width",
+    "overhang_dead_moment",
+    "overhang_live_moment",
+    "strip_length",
+    "strip_width",
     "axle_layout",
     "effect_unit",
     "load_effect",

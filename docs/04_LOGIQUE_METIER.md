@@ -91,3 +91,31 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
 - **Invariants exacts** (validation) : `∫η⁺ + ∫η⁻ = ∫η` et `∫η⁺ ≥ ∫η ≥ ∫η⁻` ; moment à
   mi-travée d'une travée simple sous charge uniforme = `w·L²/8` ; les segments dédoublés
   au point de coupure (saut de V) sont ignorés dans l'intégration.
+
+## R9 — Dalle de tablier : méthode de la bande équivalente (AASHTO) — validé
+- La dalle est une **poutre continue TRANSVERSALE** portant sur les longerons (= appuis),
+  extrémités libres = porte-à-faux. On réutilise `compute_influence_line` avec des
+  `supports` aux positions de longerons : `total = 2·overhang + (N-1)·S`.
+- **Trois sections de calcul** :
+  - **Moment positif** : à mi-baie intérieure (ligne d'influence + balayage des roues) ;
+  - **Moment négatif** : au droit d'un longeron **INTÉRIEUR** (jamais l'appui de rive :
+    la rotule à l'appui extérieur fait « battre » le porte-à-faux → matrice singulière,
+    cf. limite mécanisme) ;
+  - **Porte-à-faux** : par **STATIQUE** (console isostatique), sans ligne d'influence :
+    `M_LL = (1+IM)·Σ P·X`, `M_DC/DW = w·L²/2`. C'est aussi la pratique AASHTO.
+- **Roue de calcul** = essieu arrière HL-93 / 2 (16 kip US, 72.5 kN SI), **dérivée** de
+  chaque jeu officiel, jamais convertie d'un système à l'autre (cf. R7/D5). Gage
+  transversal 6 ft / 1.8 m ; roue de rive à 1 ft / 0.3 m du bord ; IM = 33 %.
+- **Largeur de bande équivalente E** (AASHTO LRFD Table 4.6.2.1.3-1) :
+  - US (E en pouces, S/X en ft) : positif `26+6.6S`, négatif `48+3.0S`, porte-à-faux `45+10X`.
+  - SI (E en mm, S/X en mm) : positif `660+0.55S`, négatif `1220+0.25S`, porte-à-faux `1140+0.833X`.
+- **Moment de calcul par unité de largeur** : `m_LL = MPF · M_bande / E_longueur`
+  (`E_longueur` = E/12 ft en US, E/1000 m en SI). `MPF` = facteur de présence multiple
+  (défaut 1.20, une voie chargée).
+- **Charge permanente** : DC (poids propre dalle) et DW (revêtement) intégrés sur la bande
+  transversale (`w·∫η` aux sections + ; `w·L²/2` au porte-à-faux).
+- **Combinaison Strength I à facteurs ÉDITABLES** : `Mu = γ_DC·M_DC + γ_DW·M_DW + γ_LL·(M_LL+IM)`,
+  défauts γ = 1.25 / 1.50 / 1.75 (l'utilisateur peut les modifier).
+- **Agnosticité préservée** (R6) : `deck.py` est un module de bord ; `compute_influence_line`
+  n'est jamais appelé avec `unit_system`. Invariants de validation : porte-à-faux
+  `M = P·X·(1+IM)` exact ; symétrie M⁻ ; linéarité en w ; `Mu = Σ γ·M`.
