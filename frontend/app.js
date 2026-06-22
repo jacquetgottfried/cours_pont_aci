@@ -4,6 +4,16 @@
 // - effet live (interpolation en JS) + balayage automatique (max, via API)
 
 const $ = (id) => document.getElementById(id);
+
+// Met en forme le `detail` d'une erreur HTTP : chaîne (400 métier) ou liste de
+// validations Pydantic (422). Évite d'afficher du JSON brut à l'utilisateur.
+function errorDetail(data) {
+  const d = data && data.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) return d.map((e) => e.msg || JSON.stringify(e)).join(" ; ");
+  return d ? JSON.stringify(d) : "erreur inconnue";
+}
+
 let chart = null;
 let envChart = null;
 let distEnvChart = null; // enveloppe de moment fléchissant (charge répartie)
@@ -22,12 +32,29 @@ const UNIT_DEFAULTS = {
   SI: {
     spans: "15, 10, 15", dx: "1", target_x: "0",
     force: "kN", length: "m", w_dc: "10", w_dw: "3",
+    rear: { min: 4.3, max: 9.0, default: 4.3, step: 0.1 },
   },
   US: {
     spans: "50, 30, 50", dx: "2.5", target_x: "0",
     force: "kip", length: "ft", w_dc: "1.0", w_dw: "0.3",
+    rear: { min: 14.0, max: 30.0, default: 14.0, step: 0.5 },
   },
 };
+
+// Réinitialise le curseur d'espacement arrière aux bornes du système courant.
+// Bornes de secours (UNIT_DEFAULTS) pour ne JAMAIS envoyer une valeur SI en US,
+// même si le catalogue n'a pas pu être chargé (cf. bug rear_spacing 4.3 en US).
+function resetRearSpacing(bounds) {
+  const b = bounds || UNIT_DEFAULTS[unitSystem()].rear;
+  const slider = $("rear-spacing");
+  slider.min = b.min;
+  slider.max = b.max;
+  slider.step = b.step !== undefined ? b.step : unitSystem() === "SI" ? 0.1 : 0.5;
+  if (Number(slider.value) < b.min || Number(slider.value) > b.max) {
+    slider.value = b.default;
+  }
+  $("rear-spacing-val").textContent = Number(slider.value).toFixed(1);
+}
 const unitSystem = () => $("unit-system").value;
 const forceUnit = () =>
   catalog ? catalog.force_unit : UNIT_DEFAULTS[unitSystem()].force;
@@ -241,11 +268,7 @@ async function compute(evt) {
     });
     const data = await resp.json();
     if (!resp.ok) {
-      const detail =
-        typeof data.detail === "string"
-          ? data.detail
-          : JSON.stringify(data.detail);
-      throw new Error(detail);
+      throw new Error(errorDetail(data));
     }
     lastResult = data;
     drawInfluence(data);
@@ -379,11 +402,7 @@ async function sweep() {
     });
     const data = await resp.json();
     if (!resp.ok) {
-      const detail =
-        typeof data.detail === "string"
-          ? data.detail
-          : JSON.stringify(data.detail);
-      throw new Error(detail);
+      throw new Error(errorDetail(data));
     }
     showEnvelope(data);
     // placer le véhicule à la position la plus défavorable (gouvernante)
@@ -525,9 +544,7 @@ async function fetchDistributedEnvelope(quantity) {
   });
   const data = await resp.json();
   if (!resp.ok) {
-    const detail =
-      typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
-    throw new Error(detail);
+    throw new Error(errorDetail(data));
   }
   return data;
 }
@@ -742,10 +759,6 @@ function applyUnitLabels() {
   const fu = forceUnit();
   document.querySelectorAll(".ulen").forEach((el) => (el.textContent = lu));
   document.querySelectorAll(".uload").forEach((el) => (el.textContent = `${fu}/${lu}`));
-  $("unit-hint").textContent =
-    unitSystem() === "SI"
-      ? "SI (longueurs en m, charges en kN)"
-      : "US (longueurs en ft, charges en kip)";
   if (!catalog) return;
   const t = catalog.truck;
   const td = catalog.tandem;
@@ -753,16 +766,8 @@ function applyUnitLabels() {
     `Camion de calcul (${t.axles.map((a) => a.load).join(" / ")} ${fu})`;
   $("opt-tandem").textContent =
     `Tandem (${td.axles.map((a) => a.load).join(" / ")} ${fu})`;
-  // Curseur d'espacement arrière : bornes du système courant.
-  const rs = t.rear_spacing;
-  const slider = $("rear-spacing");
-  slider.min = rs.min;
-  slider.max = rs.max;
-  slider.step = unitSystem() === "SI" ? 0.1 : 0.5;
-  if (Number(slider.value) < rs.min || Number(slider.value) > rs.max) {
-    slider.value = rs.default;
-  }
-  $("rear-spacing-val").textContent = Number(slider.value).toFixed(1);
+  // Curseur d'espacement arrière : bornes officielles du catalogue (système courant).
+  resetRearSpacing(t.rear_spacing);
 }
 
 // Bascule SI <-> US : réinitialise les champs aux défauts de la nouvelle unité
@@ -777,6 +782,9 @@ async function onUnitSystemChange() {
   $("quantity").value = "R";
   $("w-dc").value = d.w_dc;
   $("w-dw").value = d.w_dw;
+  // Espacement arrière : reset immédiat aux bornes du système (secours si le
+  // catalogue ne se charge pas), affiné ensuite par applyUnitLabels.
+  resetRearSpacing();
   // Dalle : réinitialiser aussi aux défauts du système (pas de conversion, cf. D6).
   const dd = DECK_DEFAULTS[unitSystem()];
   $("deck-s").value = dd.s;
@@ -851,11 +859,7 @@ async function computeDeck(evt) {
     });
     const data = await resp.json();
     if (!resp.ok) {
-      const detail =
-        typeof data.detail === "string"
-          ? data.detail
-          : JSON.stringify(data.detail);
-      throw new Error(detail);
+      throw new Error(errorDetail(data));
     }
     renderDeckTable(data);
     deckIlPosChart = drawDeckILChart(
