@@ -25,11 +25,18 @@ de l'appui C, LIRC discontinuité aberrante (pic 0.28 au lieu de 1.0), LIVF coup
 placée. Seul `LIVE_resultats.csv` est correct (témoin). On valide donc sur des propriétés
 analytiques exactes (cf. 04 R3), pas sur les CSV.
 
-## Limite assumée — méthode « charge unitaire » et mécanismes
-La résolution par charge unitaire exige que la structure libérée reste stable. Libérer
-l'unique autre appui (réaction d'une travée simplement appuyée) crée un mécanisme :
-matrice singulière, erreur explicite. Gérer ce cas nécessiterait la méthode du
-déplacement imposé (condition de Dirichlet) — non implémentée.
+## Mécanismes à 1 DDL (travée simple) — résolu par le mode cinématique
+**Auparavant** une limite assumée : libérer l'unique autre appui d'une travée simple
+(réaction), ou insérer une rotule / coupure sur une travée simple, crée un **mécanisme à
+1 DDL** → matrice K singulière → erreur explicite. **Désormais traité** : la ligne
+d'influence EST ce mode cinématique (la déformée du mécanisme). On l'extrait du **noyau de
+K** (vecteur singulier de plus petite valeur singulière), orienté pour que la charge de
+libération y travaille positivement (`P·U > 0`, cohérent avec `K⁻¹·P` quand il existe).
+C'est la forme « déplacement imposé » du principe de Müller-Breslau. Validé : travée
+simple R linéaire `(L-x)/L`, M triangle de pic `a·b/L`, V saut unitaire ; multi-travées
+inchangé au flottant près (`_solve_release` dans `influence_line.py`).
+**Reste non supporté** : un mécanisme à **≥ 2 DDL** (structure réellement instable, p. ex.
+aucun appui restant) → erreur explicite (rang de K trop faible).
 
 ## D5 — Convertir numériquement le véhicule HL-93 SI→US (rejeté)
 Tentant de ne stocker qu'un jeu (SI) et de convertir (×1/4.4482, ×1/0.3048) pour l'US.

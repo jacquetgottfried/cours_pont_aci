@@ -9,6 +9,13 @@ Principe (méthode matricielle des déplacements) :
     (appui libéré pour R, rotule pour M, coupure pour V) ;
   - on applique un chargement unitaire au DDL libéré et on résout K·U = P ;
   - la déformée, normalisée (réciprocité de Maxwell-Betti), EST la ligne d'influence.
+
+Cas particulier — travée simple (2 appuis) : toute libération (réaction, rotule ou
+coupure) transforme la structure en **mécanisme à 1 degré de liberté** (matrice K
+singulière). La ligne d'influence EST alors le mode cinématique de ce mécanisme : on
+l'extrait du noyau de K, orienté pour que la charge de libération y travaille
+positivement (cohérent avec la solution de K·U = P quand celle-ci existe). C'est la
+forme « déplacement imposé » du principe de Müller-Breslau (cf. 05).
 """
 
 from __future__ import annotations
@@ -32,6 +39,36 @@ from calcul_structure import (  # noqa: E402
 from .model_builder import REACTION, SHEAR, build_model  # noqa: E402
 
 _NORM_TOL = 1e-12
+
+
+def _solve_release(K, P, quantity, target_x):
+    """Résout K·U = P, ou renvoie le mode du mécanisme si K est singulière.
+
+    - Structure stable après libération (cas indéterminé / multi-travées) : K est
+      régulière, on résout directement `K·U = P`.
+    - Structure rendue mécanisme par la libération (travée simple : réaction, rotule ou
+      coupure) : K a un noyau de dimension 1. La ligne d'influence EST ce mode du noyau
+      (la déformée du mécanisme). On l'oriente de sorte que `P·U > 0` — la charge de
+      libération y travaille positivement, exactement comme `K⁻¹·P` quand il existe.
+    - Mécanisme à ≥ 2 degrés de liberté : structure réellement instable → erreur.
+    """
+    n = K.shape[0]
+    sv = np.linalg.svd(K, compute_uv=False)
+    tol = sv[0] * n * np.finfo(float).eps
+    deficiency = int(np.count_nonzero(sv <= tol))
+    if deficiency == 0:
+        return np.linalg.solve(K, P)
+    if deficiency == 1:
+        _, _, vt = np.linalg.svd(K)
+        mode = vt[-1].copy()  # vecteur du noyau (plus petite valeur singulière)
+        if np.dot(P, mode) < 0.0:
+            mode = -mode
+        return mode
+    raise RuntimeError(
+        "Structure instable : la libération crée un mécanisme à plusieurs degrés de "
+        "liberté (rang de la matrice de rigidité trop faible). "
+        f"(quantity={quantity}, target_x={target_x})"
+    )
 
 
 def compute_influence_line(
@@ -81,16 +118,9 @@ def compute_influence_line(
     for dof, sign in zip(model.release_dofs, model.release_signs):
         P[dof] += sign
 
-    try:
-        U = np.linalg.solve(K, P)
-    except np.linalg.LinAlgError as exc:
-        raise RuntimeError(
-            "Matrice de rigidité singulière : la structure libérée est un mécanisme. "
-            "La méthode de la charge unitaire exige que la structure reste stable après "
-            "libération (p. ex. au moins 2 appuis restants pour une réaction). "
-            "Cas typique non supporté : réaction d'une travée simple (un seul autre appui). "
-            f"(quantity={quantity}, target_x={target_x})"
-        ) from exc
+    # Résolution robuste : régulière si la structure reste stable, sinon mode du
+    # mécanisme (travée simple) — cf. _solve_release et l'en-tête du module.
+    U = _solve_release(K, P, quantity, target_x)
 
     # Normalisation (réciprocité de Maxwell-Betti).
     if quantity == REACTION:

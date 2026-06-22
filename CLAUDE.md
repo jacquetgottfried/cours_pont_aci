@@ -57,7 +57,7 @@ Shape `(6, n_elements)`; `LM[:, e]` lists the 6 global DOF numbers for element `
 
 ## Gotchas & invariants
 
-- **Mechanism / singular matrix**: the unit-load method requires the *released* structure to stay stable. Releasing the only other support (e.g. the reaction of a single simply-supported span) yields a singular `K` → explicit `RuntimeError`. Not supported (would need an imposed-displacement / Dirichlet method).
+- **Mechanism / singular matrix**: releasing on a 2-support span (single simply-supported span: reaction, hinge or cut) makes the *released* structure a **1-DOF mechanism** → singular `K`. The influence line **is** that kinematic mode: `_solve_release` (in [engine/influence_line.py](engine/influence_line.py)) extracts it from the null space of `K`, oriented so the release load does positive work (`P·U>0`). This is the imposed-displacement form of Müller-Breslau. A **≥2-DOF mechanism** (truly unstable, e.g. no support left) still raises `RuntimeError`.
 - **Shear discontinuity**: for `V`, the `x` array is **doubled** at the cut to render the jump; `y_nodes` is the un-doubled per-node array. `vehicle_loads.interp` keeps the worse side at a jump.
 - **Validation strategy**: the historical CSVs in `resultats/` are **mostly wrong** (buggy hand `LM`); only `LIVE_resultats.csv` is correct. Tests therefore assert **analytical invariants** (sum of reaction LIs = 1 everywhere; LI = 0 at every support; unit value-jump for `V`; unit slope-jump for `M`) — never the CSVs (see `05` / D4). 65 tests across [tests/](tests/) must stay green (LI invariants, HL-93 loads SI/US, API integration).
 
