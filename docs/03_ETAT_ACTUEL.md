@@ -39,10 +39,13 @@ Branche : `refactor/ui-support`. **Poutre longitudinale + Tablier (dalle), UI à
 ## Migration frontend (en cours)
 - Nouveau front **`web/`** : React + TS (Vite), Tailwind + shadcn/ui, TanStack Query,
   Recharts, React Konva. **Couche présentation pure** : appelle l'API, zéro calcul en TS.
-- Incrément 1 livré = **tranche Poutre** : éditeur Konva (section glissable) → LI live
-  (Recharts) → bouton « Position critique » (`/vehicle-envelope`). typecheck + lint + build
-  + 6 tests Vitest OK ; serveur dev + API vérifiés de bout en bout.
-- Reste à porter (incréments suivants) : enveloppes M/V (Plotly), DC/DW, onglet Tablier.
+- Incrément 1 = **tranche Poutre** : éditeur Konva (section glissable, snap appui/nœud
+  selon R ou M/V) → LI live (Recharts) → bouton « Position critique » (`/vehicle-envelope`).
+- Incrément 2 = **onglet Tablier** (shadcn Tabs) : `/deck-design` live ; coupe transversale
+  Konva (longerons, porte-à-faux, roues), tableau des 3 sections (M_DC/M_DW/M_LL+IM/E/Mu),
+  2 LI transversales (positif/négatif, Recharts). typecheck + lint + build + **12 tests
+  Vitest** OK ; serveur dev + API vérifiés de bout en bout (SI/US).
+- Reste à porter : enveloppes M/V (Plotly), charges réparties DC/DW poutre, exports.
   `frontend/` (vanilla) conservé en référence jusqu'à parité.
 
 ## Lancer
