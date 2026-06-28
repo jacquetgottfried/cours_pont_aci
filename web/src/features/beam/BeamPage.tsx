@@ -18,7 +18,6 @@ import type {
 import {
   UNIT_DEFAULTS,
   defaultTarget,
-  effectUnit,
   forceUnit,
   lengthUnit,
   nearestTarget,
@@ -43,6 +42,8 @@ export function BeamPage() {
     defaultTarget(parseSpans(INITIAL_SPANS), UNIT_DEFAULTS.SI.dx, 'M'),
   )
   const [placement, setPlacement] = useState<VehicleEnvelopeResponse | null>(null)
+  // V : côté de la coupure visualisé (avant = gauche/négatif, après = droite/positif).
+  const [vSide, setVSide] = useState<'avant' | 'apres'>('avant')
 
   const spans = useMemo(() => parseSpans(spansText), [spansText])
   const L = useMemo(() => spans.reduce((a, b) => a + b, 0), [spans])
@@ -87,8 +88,31 @@ export function BeamPage() {
 
   const findCritical = () => {
     if (!ilReq) return
-    sweep.mutate({ ...ilReq, vehicle, impact: true }, { onSuccess: setPlacement })
+    sweep.mutate(
+      { ...ilReq, vehicle, impact: true },
+      {
+        onSuccess: (res) => {
+          setPlacement(res)
+          // Par défaut on visualise le côté gouvernant (plus grande valeur absolue).
+          setVSide(
+            Math.abs(res.min.value) >= Math.abs(res.max.value) ? 'avant' : 'apres',
+          )
+        },
+      },
+    )
   }
+
+  // Pour V, l'effort tranchant DIFFÈRE de part et d'autre de la coupure : « avant »
+  // (gauche, négatif = min) et « après » (droite, positif = max) sont deux efforts de
+  // calcul distincts. Pour R/M (continus), un seul effet gouvernant.
+  const activeExtreme =
+    placement == null
+      ? null
+      : quantity === 'V'
+        ? vSide === 'avant'
+          ? placement.min
+          : placement.max
+        : placement.governing
 
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
@@ -148,7 +172,7 @@ export function BeamPage() {
                 supports={supports}
                 targetX={reqTarget}
                 snapTargets={targets}
-                axles={placement?.governing.axle_positions ?? null}
+                axles={activeExtreme?.axle_positions ?? null}
                 forceUnit={fu}
                 lengthUnit={lu}
                 onTargetXChange={setTargetX}
@@ -161,18 +185,55 @@ export function BeamPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>
-              Ligne d'influence — {quantity} à x = {reqTarget.toFixed(1)} {lu}
-            </CardTitle>
-            {placement && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle>
+                Ligne d'influence — {quantity} à x = {reqTarget.toFixed(1)} {lu}
+              </CardTitle>
+              {placement && quantity === 'V' && (
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant={vSide === 'avant' ? 'default' : 'outline'}
+                    onClick={() => setVSide('avant')}
+                  >
+                    Avant coupure
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={vSide === 'apres' ? 'default' : 'outline'}
+                    onClick={() => setVSide('apres')}
+                  >
+                    Après coupure
+                  </Button>
+                </div>
+              )}
+            </div>
+            {placement && quantity === 'V' ? (
+              <CardDescription>
+                <span className="block">
+                  Avant la coupure (gauche) :{' '}
+                  <strong>
+                    {placement.min.value.toFixed(2)} {placement.unit}
+                  </strong>{' '}
+                  (tête à {placement.min.lead_pos.toFixed(2)} {lu})
+                </span>
+                <span className="block">
+                  Après la coupure (droite) :{' '}
+                  <strong>
+                    {placement.max.value.toFixed(2)} {placement.unit}
+                  </strong>{' '}
+                  (tête à {placement.max.lead_pos.toFixed(2)} {lu})
+                </span>
+              </CardDescription>
+            ) : placement ? (
               <CardDescription>
                 Effet gouvernant :{' '}
                 <strong>
-                  {placement.governing.value.toFixed(2)} {effectUnit(quantity, unitSystem)}
+                  {placement.governing.value.toFixed(2)} {placement.unit}
                 </strong>{' '}
                 (essieu de tête à {placement.governing.lead_pos.toFixed(2)} {lu})
               </CardDescription>
-            )}
+            ) : null}
           </CardHeader>
           <CardContent>
             {il.data ? (
