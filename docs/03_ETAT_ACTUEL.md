@@ -5,50 +5,29 @@
 
 # État actuel
 
-Branche : `refactor/ui-support`. **Poutre longitudinale + Tablier (dalle), UI à 2 onglets.**
+**Calcul en Python (stable) ; front en migration React/TS.**
 
-## Fait
-- Moteur `engine/` : `compute_influence_line` (agnostique) + `vehicle_loads` (HL-93) +
-  `distributed_loads` (DC/DW : `effet=w·∫η`, enveloppes M & V) + `deck` (dalle).
-- **Tablier (dalle)** — `deck.py`, méthode de la **bande équivalente** AASHTO : poutre
-  transversale sur les longerons. 3 sections : positif (mi-baie, IL), négatif (longeron
-  intérieur, IL), porte-à-faux (**statique**, car l'IL de l'appui de rive = mécanisme).
-  `m_LL = MPF·M_bande/E` (E US in / SI mm) ; DC/DW + combinaison `Mu = γ·M` à facteurs
-  **éditables**. Roue = essieu HL-93/2. SI+US. Cf. 04 R9 / 05 D9-D10.
-- Backend FastAPI : + `GET /deck-catalog`, `POST /deck-design` (en plus de l'existant).
-- Frontend : **UI refonte à onglets** « Poutre longitudinale » | « Tablier » (bascule
-  SI/US partagée, 2 colonnes entrées|sorties). Onglet dalle : tableau des moments (3
-  sections × DC/DW/LL+IM/E/Mu) + 2 IL transversales (roues placées, zones DC/DW ombrées).
-- **Travée simple corrigée** : toute libération sur une travée à 2 appuis crée un
-  mécanisme à 1 DDL ; la LI est désormais le **mode cinématique** (noyau de K), au lieu
-  d'une erreur/d'un résultat fragile. R linéaire, M triangle `a·b/L`, V saut unitaire.
-- **123 TU au vert** (92 + 28 dalle + 3 travée simple) ; audit qualité OK.
+## Couche calcul (Python — inchangée, 123 TU verts)
+- `engine/` : `compute_influence_line` (agnostique ; travée simple = mode cinématique du
+  noyau de K) + `vehicle_loads` (HL-93) + `distributed_loads` (DC/DW) + `deck` (dalle,
+  bande équivalente AASHTO). Backend FastAPI : toutes les routes + CORS ouvert.
 
-## Validé numériquement
-- LI : somme réactions=1 ; saut V unitaire ; saut de pente M ; zéros aux appuis.
-- Charges réparties : `∫η⁺+∫η⁻=∫η` ; mi-travée travée simple = `w·L²/8` ; live-JS == moteur.
-- Dalle : porte-à-faux `M=P·X·(1+IM)` exact ; symétrie M⁻ ; E AASHTO US/SI ; `Mu=Σγ·M` ;
-  échantillon US (M⁻≈-30.9, M⁺≈+24.6, porte-à-faux≈47.9 ; E 78.8/72/67.5 in).
+## Front React `web/` (PRINCIPAL désormais)
+- Vite + TS strict, Tailwind + shadcn/ui, TanStack Query, Recharts, React Konva.
+  **Présentation pure** : appelle l'API, zéro calcul en TS. **12 tests Vitest**.
+- **Onglet Poutre** : éditeur Konva (section glissable, snap appui pour R / nœud pour M/V)
+  → LI live (Recharts) → « Position critique » (`/vehicle-envelope`).
+- **Onglet Tablier** : `/deck-design` live ; coupe transversale Konva, tableau 3 sections
+  (M_DC/M_DW/M_LL+IM/E/Mu), 2 LI transversales (positif/négatif).
+
+## Legacy (référence)
+- `frontend/` (vanilla + Chart.js) : couvre tout (poutre, HL-93, DC/DW, enveloppes M/V,
+  tablier) — conservé jusqu'à parité React. Notebooks pédagogiques dans `legacy/`.
 
 ## Limites connues
-- Charge de voie répartie (9.3 kN/m) non incluse (choix). Mécanismes à 1 DDL (travée
-  simple, appui de rive du porte-à-faux) traités par le mode cinématique ; seul un
-  mécanisme à ≥2 DDL (structure réellement instable) reste une erreur explicite.
-- **Dette** : équivalence live-JS = moteur couverte (réparties) ; pas pour le véhicule HL-93.
-
-## Migration frontend (en cours)
-- Nouveau front **`web/`** : React + TS (Vite), Tailwind + shadcn/ui, TanStack Query,
-  Recharts, React Konva. **Couche présentation pure** : appelle l'API, zéro calcul en TS.
-- Incrément 1 = **tranche Poutre** : éditeur Konva (section glissable, snap appui/nœud
-  selon R ou M/V) → LI live (Recharts) → bouton « Position critique » (`/vehicle-envelope`).
-- Incrément 2 = **onglet Tablier** (shadcn Tabs) : `/deck-design` live ; coupe transversale
-  Konva (longerons, porte-à-faux, roues), tableau des 3 sections (M_DC/M_DW/M_LL+IM/E/Mu),
-  2 LI transversales (positif/négatif, Recharts). typecheck + lint + build + **12 tests
-  Vitest** OK ; serveur dev + API vérifiés de bout en bout (SI/US).
-- Reste à porter : enveloppes M/V (Plotly), charges réparties DC/DW poutre, exports.
-  `frontend/` (vanilla) conservé en référence jusqu'à parité.
+- Charge de voie répartie (9.3 kN/m) non incluse (choix). Mécanisme ≥2 DDL = erreur.
+- Reste à porter en React : enveloppes M/V (Plotly), DC/DW poutre, exports CSV.
 
 ## Lancer
 - `run.bat` (backend `:8000` + front React `:5173`)
-- Dev manuel : `uvicorn backend.main:app --reload` + `cd web && npm run dev`
-- Tests : `pytest tests/` (123) ; `cd web && npm run test` (6)
+- Tests : `pytest tests/` (123) ; `cd web && npm run test` (12)

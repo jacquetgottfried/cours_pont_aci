@@ -86,3 +86,20 @@ roue, libellés) et appelle le cœur SANS unité. Le cœur reste agnostique (04 
 reçoit une géométrie transversale (en m ou en ft) et renvoie des ordonnées dans la même
 unité. La formule de bande SI étant définie en mm, la conversion m→mm est interne à
 `deck.py` (application d'une formule officielle métrique, pas une conversion de véhicule).
+
+## D11 — Réécrire le calcul en TypeScript (front 100 % statique) (rejeté)
+Pour la migration React, tentation de porter toute la mécanique (EF, Müller-Breslau, HL-93,
+bande équivalente) en TS → site statique sans backend, zéro install pour l'étudiant. Rejeté :
+~2000 lignes à reporter ET à re-tester (les 123 TU Python sont l'oracle), risque de
+divergence de calcul, perte de la frontière nette calcul/présentation. Retenu : **le moteur
+Python reste la couche calcul**, exposé par FastAPI ; React = couche présentation typée qui
+appelle l'API. (Pyodide/WASM pour exécuter le Python en navigateur : écarté aussi — lourd,
+inutile pour un outil local.)
+
+## D12 — Next.js pour le front (rejeté)
+Pour la couche présentation. Rejeté : SSR/routing serveur inutiles pour un outil de calcul
+**local et interactif** (tout est côté client). On garde **Vite (SPA)** — plus léger, build
+statique servi par FastAPI ou ouvert tel quel. Stack : React + TS strict, Tailwind +
+shadcn/ui, TanStack Query (isole le fetch du rendu), Recharts (courbes), React Konva
+(éditeurs). L'ancien front `frontend/` (vanilla + Chart.js) est conservé en référence de
+portage jusqu'à parité, puis sera retiré.

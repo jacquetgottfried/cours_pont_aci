@@ -6,6 +6,8 @@
 # Contrat API
 
 Base : `http://127.0.0.1:8000` · Documentation interactive : `/docs`.
+**CORS ouvert** (`allow_origins=["*"]`) : le front React de dev (`:5173`) appelle l'API
+en cross-origin. Aucune route n'a changé cette session (le front React réutilise l'existant).
 
 ## GET /health — sonde de disponibilité
 - Payload : aucun.

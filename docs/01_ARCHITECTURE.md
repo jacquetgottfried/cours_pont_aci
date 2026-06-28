@@ -27,15 +27,17 @@ engine/
 backend/
   schemas.py          # modèles Pydantic (validation entrées/sorties)
   main.py             # app FastAPI : /influence-line, /vehicle-envelope, /distributed-*, /deck-*
-web/                  # NOUVEAU front React/TS (Vite) — couche présentation typée
-  src/api/            # contrat typé + fetch (seul endroit réseau)
-  src/lib/            # helpers purs (unités)
-  src/features/beam/  # tranche Poutre : éditeur Konva, LI Recharts, hooks React Query
+web/                  # Front React/TS (Vite) — couche présentation typée (PRINCIPAL)
+  src/api/            # contrat typé + fetch (seul endroit réseau) : client, types, beam, deck
+  src/lib/            # helpers purs (unités, cibles valides)
+  src/features/beam/  # onglet Poutre : éditeur Konva, LI Recharts, hooks React Query
+  src/features/deck/  # onglet Tablier : coupe Konva, tableau, LI transversales
+  src/components/ui/  # primitives shadcn/ui
 frontend/             # ANCIEN front vanilla (Chart.js) — référence de portage, à retirer
   index.html, app.js, style.css   # UI à 2 onglets : « Poutre longitudinale » | « Tablier »
 tests/
   test_influence_line.py, test_vehicle_loads.py, test_distributed_loads.py, test_deck.py, ...
-*.ipynb               # notebooks historiques (pédagogie) — NE PLUS utiliser comme moteur
+legacy/               # notebooks historiques (pédagogie) — NE PLUS utiliser comme moteur
 resultats/            # CSV historiques (majoritairement faux, voir 05) ; LIVE = témoin correct
 ```
 
@@ -44,11 +46,17 @@ resultats/            # CSV historiques (majoritairement faux, voir 05) ; LIVE =
   (travées, dx, quantité, position). C'est la correction structurante du projet.
 - Le moteur réutilise `calcul_structure.py` sans le modifier.
 - Le backend est un simple adaptateur HTTP au-dessus de `compute_influence_line`.
-- Flux de données : formulaire → `POST /influence-line` (JSON) → moteur → `{x, y, meta}` → Chart.js.
+- **Séparation calcul / présentation** : toute la mécanique vit en Python (testée) ; le front
+  React ne fait QUE de l'affichage. Frontière : `web/src/api/` (contrat typé + fetch, seul
+  endroit réseau) ↔ `web/src/features/` (composants). React Query isole le fetch du rendu.
+- Flux de données : composant → hook React Query → `POST /influence-line` → moteur →
+  `{x, y, meta}` → Recharts (courbes) / Konva (éditeur).
 - **Modules de bord** (`vehicle_loads`, `deck`) : ils connaissent `unit_system` (catalogue
   AASHTO, formules de bande) ; le cœur `compute_influence_line` reste agnostique (cf. 04 R6/D7).
 - **La dalle réutilise le même moteur** : c'est une poutre continue TRANSVERSALE (appuis =
   longerons, extrémités libres = porte-à-faux). `deck.py` appelle `compute_influence_line`
   avec des `supports` aux positions de longerons, puis applique la largeur de bande E.
-- **UI à onglets** : « Poutre longitudinale » (LI, HL-93, DC/DW) et « Tablier (dalle) »
-  (bande équivalente). Bascule SI/US partagée. Deux colonnes : entrées | sorties.
+- **UI à onglets** (shadcn Tabs) : « Poutre longitudinale » (LI live, position critique
+  HL-93) et « Tablier (dalle) » (bande équivalente, coupe transversale, 3 sections).
+  Bascule SI/US par onglet. Deux colonnes : entrées | sorties. Konva pour les éditeurs
+  interactifs, Recharts pour les courbes.
