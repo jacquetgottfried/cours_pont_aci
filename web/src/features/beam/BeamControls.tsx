@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Quantity, UnitSystem, Vehicle } from '@/api/types'
+import type { Quantity, UnitSystem } from '@/api/types'
 import { QUANTITY_LABELS, lengthUnit } from '@/lib/units'
 
 interface Props {
@@ -16,12 +16,10 @@ interface Props {
   quantity: Quantity
   dx: number
   unitSystem: UnitSystem
-  vehicle: Vehicle
   onSpansText: (s: string) => void
   onQuantity: (q: Quantity) => void
   onDx: (n: number) => void
   onUnitSystem: (s: UnitSystem) => void
-  onVehicle: (v: Vehicle) => void
 }
 
 export function BeamControls(props: Props) {
@@ -80,22 +78,6 @@ export function BeamControls(props: Props) {
           value={props.dx}
           onChange={(e) => props.onDx(Number(e.target.value))}
         />
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="vehicle">Convoi HL-93</Label>
-        <Select
-          value={props.vehicle}
-          onValueChange={(v) => props.onVehicle(v as Vehicle)}
-        >
-          <SelectTrigger id="vehicle">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="truck">Camion de calcul</SelectItem>
-            <SelectItem value="tandem">Tandem</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
     </div>
   )

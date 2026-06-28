@@ -14,9 +14,13 @@
 
 ## Front React `web/` (PRINCIPAL désormais)
 - Vite + TS strict, Tailwind + shadcn/ui, TanStack Query, Recharts, React Konva.
-  **Présentation pure** : appelle l'API, zéro calcul en TS. **12 tests Vitest**.
-- **Onglet Poutre** : éditeur Konva (section glissable, snap appui pour R / nœud pour M/V)
-  → LI live (Recharts) → « Position critique » (`/vehicle-envelope`).
+  **Présentation pure** : appelle l'API, zéro calcul en TS. **14 tests Vitest**.
+- **Onglet Poutre** (géométrie partagée + sous-onglets) :
+  - *Charge mobile HL-93* : éditeur Konva (section glissable, snap appui/nœud) → LI live →
+    « Position critique » (`/vehicle-envelope`) ; pour V, efforts avant/après coupure.
+  - *Charges permanentes DC/DW* : chargement alterné (damier) — zones chargées ombrées sur
+    la LI (`/distributed-effect`) + 2 lignes d'enveloppe M et V (`/distributed-envelope`)
+    avec M⁻ max aux appuis ◆ et M⁺ max en travée ▲.
 - **Onglet Tablier** : `/deck-design` live ; coupe transversale Konva, tableau 3 sections
   (M_DC/M_DW/M_LL+IM/E/Mu), 2 LI transversales (positif/négatif).
 
@@ -26,7 +30,7 @@
 
 ## Limites connues
 - Charge de voie répartie (9.3 kN/m) non incluse (choix). Mécanisme ≥2 DDL = erreur.
-- Reste à porter en React : enveloppes M/V (Plotly), DC/DW poutre, exports CSV.
+- Reste à porter en React : enveloppe HL-93 (Mmax/Mmin/Vmax/Vmin, Plotly), exports CSV.
 
 ## Lancer
 - `run.bat` (backend `:8000` + front React `:5173`)

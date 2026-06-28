@@ -7,6 +7,7 @@ import {
   Group,
   Layer,
   Line,
+  Rect,
   RegularPolygon,
   Stage,
   Text,
@@ -14,6 +15,7 @@ import {
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type { AxlePosition } from '@/api/types'
 import { nearestTarget } from '@/lib/units'
+import type { ShadedZone } from './InfluenceLineChart'
 
 interface Props {
   spanLength: number
@@ -22,6 +24,8 @@ interface Props {
   /** Positions où la section peut se poser (appuis pour R, nœuds pour M/V). */
   snapTargets: number[]
   axles: AxlePosition[] | null
+  /** Zones chargées (damier DC/DW) ombrées le long de la poutre. */
+  loadedZones?: ShadedZone[]
   forceUnit: string
   lengthUnit: string
   onTargetXChange: (x: number) => void
@@ -37,6 +41,7 @@ export function BeamEditor({
   targetX,
   snapTargets,
   axles,
+  loadedZones,
   forceUnit,
   lengthUnit,
   onTargetXChange,
@@ -67,6 +72,18 @@ export function BeamEditor({
     <div ref={wrapRef} className="w-full">
       <Stage width={width} height={HEIGHT}>
         <Layer>
+          {/* Zones chargées (damier DC/DW) — derrière la poutre */}
+          {loadedZones?.map((z, i) => (
+            <Rect
+              key={`z${i}`}
+              x={px(z.range[0])}
+              y={BEAM_Y - 40}
+              width={(z.range[1] - z.range[0]) * scale}
+              height={80}
+              fill={z.color}
+            />
+          ))}
+
           {/* Poutre */}
           <Line points={[px(0), BEAM_Y, px(L), BEAM_Y]} stroke="#0f172a" strokeWidth={5} />
 

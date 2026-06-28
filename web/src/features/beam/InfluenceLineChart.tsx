@@ -3,6 +3,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
@@ -12,12 +13,19 @@ import {
 } from 'recharts'
 import type { InfluenceLineResponse } from '@/api/types'
 
+/** Zone chargée à ombrer (le « damier » du chargement alterné DC/DW). */
+export interface ShadedZone {
+  range: [number, number]
+  color: string
+}
+
 interface Props {
   data: InfluenceLineResponse
   lengthUnit: string
+  zones?: ShadedZone[]
 }
 
-export function InfluenceLineChart({ data, lengthUnit }: Props) {
+export function InfluenceLineChart({ data, lengthUnit, zones }: Props) {
   const points = data.x.map((x, i) => ({ x, y: data.y[i] }))
   const q = data.meta.quantity
 
@@ -41,6 +49,16 @@ export function InfluenceLineChart({ data, lengthUnit }: Props) {
           formatter={(v) => [Number(v).toFixed(3), `η ${q}`]}
           labelFormatter={(l) => `x = ${Number(l).toFixed(2)} ${lengthUnit}`}
         />
+        {zones?.map((z, i) => (
+          <ReferenceArea
+            key={`z${i}`}
+            x1={z.range[0]}
+            x2={z.range[1]}
+            fill={z.color}
+            fillOpacity={1}
+            stroke="none"
+          />
+        ))}
         <ReferenceLine y={0} stroke="#94a3b8" />
         <ReferenceLine
           x={data.meta.target_x}

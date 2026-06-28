@@ -56,6 +56,57 @@ export interface VehicleEnvelopeResponse {
   unit: string
 }
 
+// --- Charges réparties permanentes DC / DW (chargement alterné / pattern loading) ---
+
+export interface DistributedRequest extends InfluenceLineRequest {
+  w_dc: number
+  w_dw: number
+}
+
+/** Effet d'une configuration de charge, décomposé DC / DW / somme + zones chargées. */
+export interface DistributedComponent {
+  dc: number
+  dw: number
+  total: number
+  zones: number[][]
+}
+
+export interface DistributedEffectResponse {
+  full: DistributedComponent
+  max: DistributedComponent
+  min: DistributedComponent
+  governing: DistributedComponent
+  w_dc: number
+  w_dw: number
+  unit: string
+}
+
+export interface DistributedPoint {
+  position: number
+  value: number
+}
+
+export interface DistributedGoverning {
+  value: number
+  position: number
+  zones: number[][]
+  sign: number
+}
+
+export interface DistributedEnvelopeResponse {
+  positions: number[]
+  max: number[]
+  min: number[]
+  full: number[]
+  governing: DistributedGoverning
+  midspan_points: DistributedPoint[]
+  support_points: DistributedPoint[]
+  quantity: Quantity
+  w_dc: number
+  w_dw: number
+  unit: string
+}
+
 // --- Tablier (dalle) : méthode de la bande équivalente (AASHTO) ---
 
 export interface DeckCatalog {

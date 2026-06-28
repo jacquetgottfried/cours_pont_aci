@@ -5,8 +5,17 @@ import {
   useMutation,
   useQuery,
 } from '@tanstack/react-query'
-import { influenceLine, vehicleSweep } from '@/api/beam'
-import type { InfluenceLineRequest, VehicleEnvelopeRequest } from '@/api/types'
+import {
+  distributedEffect,
+  distributedEnvelope,
+  influenceLine,
+  vehicleSweep,
+} from '@/api/beam'
+import type {
+  DistributedRequest,
+  InfluenceLineRequest,
+  VehicleEnvelopeRequest,
+} from '@/api/types'
 
 /**
  * Ligne d'influence de la section courante. `req = null` désactive la requête.
@@ -27,5 +36,27 @@ export function useInfluenceLine(req: InfluenceLineRequest | null) {
 export function useVehicleSweep() {
   return useMutation({
     mutationFn: (req: VehicleEnvelopeRequest) => vehicleSweep(req),
+  })
+}
+
+/** Effet DC/DW (full + alterné) sur la LI de la section courante. */
+export function useDistributedEffect(req: DistributedRequest | null) {
+  return useQuery({
+    queryKey: ['distributed-effect', req],
+    queryFn: () => distributedEffect(req as DistributedRequest),
+    enabled: req !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+}
+
+/** Ligne d'enveloppe DC/DW (pattern loading) pour une grandeur (M ou V). */
+export function useDistributedEnvelope(req: DistributedRequest | null) {
+  return useQuery({
+    queryKey: ['distributed-envelope', req],
+    queryFn: () => distributedEnvelope(req as DistributedRequest),
+    enabled: req !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
   })
 }

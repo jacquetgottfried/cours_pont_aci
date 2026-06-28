@@ -12,11 +12,13 @@ export interface SystemDefaults {
   dx: number
   force: string
   length: string
+  wdc: number
+  wdw: number
 }
 
 export const UNIT_DEFAULTS: Record<UnitSystem, SystemDefaults> = {
-  SI: { spans: '15, 10, 15', dx: 1, force: 'kN', length: 'm' },
-  US: { spans: '50, 30, 50', dx: 2.5, force: 'kip', length: 'ft' },
+  SI: { spans: '15, 10, 15', dx: 1, force: 'kN', length: 'm', wdc: 10, wdw: 3 },
+  US: { spans: '50, 30, 50', dx: 2.5, force: 'kip', length: 'ft', wdc: 1.0, wdw: 0.3 },
 }
 
 export const forceUnit = (sys: UnitSystem): string => UNIT_DEFAULTS[sys].force
