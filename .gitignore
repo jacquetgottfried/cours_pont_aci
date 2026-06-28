@@ -1,0 +1,5 @@
+tests/
+.venv/
+.claude/
+.env/
+engine/__pycache__/
