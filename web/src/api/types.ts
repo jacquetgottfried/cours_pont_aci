@@ -1,0 +1,147 @@
+// Contrat API : miroir typé des schémas Pydantic du backend (couche calcul).
+// Aucun calcul ici — uniquement les formes de données échangées.
+
+export type UnitSystem = 'SI' | 'US'
+export type Quantity = 'R' | 'M' | 'V'
+export type Vehicle = 'truck' | 'tandem'
+
+export interface InfluenceLineRequest {
+  spans: number[]
+  quantity: Quantity
+  target_x: number
+  dx: number
+  supports?: number[]
+  unit_system: UnitSystem
+}
+
+export interface InfluenceLineMeta {
+  quantity: Quantity
+  target_x: number
+  support_positions: number[]
+  n_ddl: number
+  n_elements: number
+}
+
+export interface InfluenceLineResponse {
+  x: number[]
+  y: number[]
+  y_nodes: number[]
+  normalization: number
+  meta: InfluenceLineMeta
+}
+
+export interface VehicleEnvelopeRequest extends InfluenceLineRequest {
+  vehicle: Vehicle
+  rear_spacing?: number
+  impact: boolean
+}
+
+export interface AxlePosition {
+  x: number
+  load: number
+}
+
+export interface EnvelopeExtreme {
+  value: number
+  lead_pos: number
+  axle_positions: AxlePosition[]
+}
+
+export interface VehicleEnvelopeResponse {
+  positions: number[]
+  effects: number[]
+  max: EnvelopeExtreme
+  min: EnvelopeExtreme
+  governing: EnvelopeExtreme
+  unit: string
+}
+
+// --- Tablier (dalle) : méthode de la bande équivalente (AASHTO) ---
+
+export interface DeckCatalog {
+  P: number
+  gage: number
+  edge_offset: number
+  im: number
+  force_unit: string
+  length_unit: string
+}
+
+export interface DeckDesignRequest {
+  n_girders: number
+  spacing: number
+  overhang: number
+  dx: number
+  w_dc: number
+  w_dw: number
+  gamma_dc: number
+  gamma_dw: number
+  gamma_ll: number
+  mpf: number
+  impact: boolean
+  unit_system: UnitSystem
+}
+
+export interface DeckGeometry {
+  total: number
+  girders: number[]
+  overhang: number
+  spacing: number
+  n_girders: number
+  dx: number
+}
+
+export interface DeckSection {
+  M_DC: number
+  M_DW: number
+  M_LL: number
+  M_strip: number
+  E: number
+  E_length: number
+  Mu: number
+  target_x: number
+}
+
+export interface DeckOverhangWheel {
+  x: number
+  X: number
+  P: number
+}
+
+export interface DeckOverhangSection {
+  M_DC: number
+  M_DW: number
+  M_LL: number
+  M_strip: number
+  E: number
+  E_length: number
+  Mu: number
+  X: number
+  wheels: DeckOverhangWheel[]
+}
+
+export interface DeckILView {
+  x: number[]
+  y: number[]
+  target_x: number
+  support_positions: number[]
+  wheels: AxlePosition[]
+  dead_zones: number[][]
+}
+
+export interface DeckDesignResponse {
+  geometry: DeckGeometry
+  wheel: { P: number; gage: number; edge_offset: number; im: number }
+  factors: { gamma_dc: number; gamma_dw: number; gamma_ll: number; mpf: number }
+  sections: {
+    positive: DeckSection
+    negative: DeckSection
+    overhang: DeckOverhangSection
+  }
+  influence_lines: {
+    positive: DeckILView
+    negative: DeckILView
+  }
+  unit_effort: string
+  unit_line: string
+}
