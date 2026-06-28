@@ -36,6 +36,16 @@ Branche : `refactor/ui-support`. **Poutre longitudinale + Tablier (dalle), UI à
   mécanisme à ≥2 DDL (structure réellement instable) reste une erreur explicite.
 - **Dette** : équivalence live-JS = moteur couverte (réparties) ; pas pour le véhicule HL-93.
 
+## Migration frontend (en cours)
+- Nouveau front **`web/`** : React + TS (Vite), Tailwind + shadcn/ui, TanStack Query,
+  Recharts, React Konva. **Couche présentation pure** : appelle l'API, zéro calcul en TS.
+- Incrément 1 livré = **tranche Poutre** : éditeur Konva (section glissable) → LI live
+  (Recharts) → bouton « Position critique » (`/vehicle-envelope`). typecheck + lint + build
+  + 6 tests Vitest OK ; serveur dev + API vérifiés de bout en bout.
+- Reste à porter (incréments suivants) : enveloppes M/V (Plotly), DC/DW, onglet Tablier.
+  `frontend/` (vanilla) conservé en référence jusqu'à parité.
+
 ## Lancer
-- `run.bat` (ou `uvicorn backend.main:app --reload` + ouvrir `frontend/index.html`)
-- `pytest tests/`
+- `run.bat` (backend `:8000` + front React `:5173`)
+- Dev manuel : `uvicorn backend.main:app --reload` + `cd web && npm run dev`
+- Tests : `pytest tests/` (123) ; `cd web && npm run test` (6)

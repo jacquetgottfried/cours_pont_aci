@@ -35,9 +35,10 @@ The five [docs/](docs/) files are the **source of truth** and are `@`-imported a
 
 - Install deps: `pip install -r requirements.txt`
 - Run the API: `uvicorn backend.main:app --reload` (docs at http://127.0.0.1:8000/docs)
-- Full app on Windows: `run.bat` (installs deps if needed, starts the API in a new window, opens the frontend)
-- Frontend: open [frontend/index.html](frontend/index.html) directly in a browser (no build step; Chart.js loaded from CDN). It calls the API base shown in its form field (default `http://127.0.0.1:8000`).
-- All tests: `pytest tests/`
+- Full app on Windows: `run.bat` (installs deps if needed, starts the API and the React dev server in new windows)
+- Frontend (current): React/TS app in [web/](web/) — `cd web && npm install && npm run dev` (Vite, http://127.0.0.1:5173). It is the **presentation layer only** and calls the API (`VITE_API_BASE`, default `http://127.0.0.1:8000`); CORS is open on the backend. **No calc in TS** — the Python engine stays the calc layer. Frontend checks: `npm run typecheck`, `npm run lint`, `npm run test` (Vitest), `npm run build`.
+- Frontend (legacy): [frontend/index.html](frontend/index.html) — old vanilla+Chart.js UI, kept as a porting reference until the React app reaches parity (Tablier, DC/DW, envelopes not yet ported).
+- All Python tests: `pytest tests/`
 - One test: `pytest tests/test_influence_line.py::test_reactions_somme_egale_un`
 
 ## Architecture (the big picture)

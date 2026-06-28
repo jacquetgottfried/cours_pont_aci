@@ -113,8 +113,11 @@
     return d ? JSON.stringify(d) : "erreur inconnue";
   }
 
+  // Adresse de l'API (outil local) — fixe ; à changer ici si le backend change de port.
+  const API_BASE = "http://127.0.0.1:8000";
+
   const api = {
-    base: () => val("api").replace(/\/+$/, ""),
+    base: () => API_BASE,
     async get(path, params = {}) {
       const qs = new URLSearchParams(params).toString();
       const resp = await fetch(`${this.base()}${path}${qs ? `?${qs}` : ""}`);

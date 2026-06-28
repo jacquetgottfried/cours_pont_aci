@@ -8,9 +8,12 @@ Application de calcul de **lignes d'influence** d'une poutre continue, en 3 couc
 
 ## Stack
 - **Moteur** : Python + NumPy (méthode des éléments finis, portique 2D, 3 DDL/nœud).
-- **Backend** : FastAPI + Pydantic + Uvicorn.
-- **Frontend** : HTML/CSS/JS statique + Chart.js (CDN, sans build).
-- **Tests** : pytest.
+- **Backend** : FastAPI + Pydantic + Uvicorn (CORS ouvert pour le front de dev).
+- **Frontend** : `web/` — **React + TypeScript (Vite)**, Tailwind + shadcn/ui, TanStack Query,
+  Recharts (courbes), React Konva (éditeur). Appelle l'API ; **aucun calcul en TS**.
+  Migration en cours (incrément 1 = tranche Poutre) ; `frontend/` (vanilla + Chart.js) reste
+  en référence de portage jusqu'à parité.
+- **Tests** : pytest (moteur/API) ; Vitest + Testing Library (front, tests légers).
 
 ## Arborescence
 ```
@@ -24,7 +27,11 @@ engine/
 backend/
   schemas.py          # modèles Pydantic (validation entrées/sorties)
   main.py             # app FastAPI : /influence-line, /vehicle-envelope, /distributed-*, /deck-*
-frontend/
+web/                  # NOUVEAU front React/TS (Vite) — couche présentation typée
+  src/api/            # contrat typé + fetch (seul endroit réseau)
+  src/lib/            # helpers purs (unités)
+  src/features/beam/  # tranche Poutre : éditeur Konva, LI Recharts, hooks React Query
+frontend/             # ANCIEN front vanilla (Chart.js) — référence de portage, à retirer
   index.html, app.js, style.css   # UI à 2 onglets : « Poutre longitudinale » | « Tablier »
 tests/
   test_influence_line.py, test_vehicle_loads.py, test_distributed_loads.py, test_deck.py, ...
