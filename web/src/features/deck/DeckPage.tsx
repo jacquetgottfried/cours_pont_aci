@@ -16,6 +16,8 @@ import { DeckCrossSection } from './DeckCrossSection'
 import { DeckILChart } from './DeckILChart'
 import { DeckResultsTable } from './DeckResultsTable'
 
+type DeckSectionKey = 'positive' | 'negative' | 'shear'
+
 function initialReq(sys: UnitSystem): DeckDesignRequest {
   const d = DECK_DEFAULTS[sys]
   return {
@@ -28,7 +30,13 @@ function initialReq(sys: UnitSystem): DeckDesignRequest {
     gamma_dc: 1.25,
     gamma_dw: 1.5,
     gamma_ll: 1.75,
-    mpf: 1.2,
+    mpf1: 1.2,
+    mpf2: 1.0,
+    mpf3: 0.85,
+    p_barrier: d.pb,
+    x_barrier: d.xb,
+    p_rail: 0,
+    x_rail: d.xr,
     impact: true,
     unit_system: sys,
   }
@@ -36,7 +44,7 @@ function initialReq(sys: UnitSystem): DeckDesignRequest {
 
 export function DeckPage() {
   const [req, setReq] = useState<DeckDesignRequest>(() => initialReq('SI'))
-  const [section, setSection] = useState<'positive' | 'negative'>('positive')
+  const [section, setSection] = useState<DeckSectionKey>('positive')
 
   const onChange = (patch: Partial<DeckDesignRequest>) =>
     setReq((r) => ({ ...r, ...patch }))
@@ -93,7 +101,12 @@ export function DeckPage() {
             <CardTitle>Coupe transversale</CardTitle>
             <CardDescription>
               Longerons (rouge) · porte-à-faux (jaune) · roues HL-93 (cas{' '}
-              {section === 'positive' ? 'positif' : 'négatif'})
+              {section === 'positive'
+                ? 'positif'
+                : section === 'negative'
+                  ? 'négatif'
+                  : 'effort tranchant'}
+              )
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -101,6 +114,14 @@ export function DeckPage() {
               <DeckCrossSection
                 geometry={data.geometry}
                 wheels={il?.wheels ?? []}
+                pointLoads={[
+                  ...(req.p_barrier > 0
+                    ? [{ x: req.x_barrier, P: req.p_barrier, label: 'Barr.' }]
+                    : []),
+                  ...(req.p_rail > 0
+                    ? [{ x: req.x_rail, P: req.p_rail, label: 'Gliss.' }]
+                    : []),
+                ]}
                 forceUnit={fu}
                 lengthUnit={lu}
               />
@@ -149,12 +170,19 @@ export function DeckPage() {
                 >
                   Négatif
                 </Button>
+                <Button
+                  size="sm"
+                  variant={section === 'shear' ? 'default' : 'outline'}
+                  onClick={() => setSection('shear')}
+                >
+                  Eff. tranchant
+                </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             {il ? (
-              <DeckILChart il={il} lengthUnit={lu} />
+              <DeckILChart il={il} lengthUnit={lu} quantity={section === 'shear' ? 'V' : 'M'} />
             ) : (
               <p className="text-sm text-muted-foreground">En attente de calcul.</p>
             )}

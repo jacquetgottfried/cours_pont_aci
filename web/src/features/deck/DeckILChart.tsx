@@ -17,10 +17,12 @@ import type { DeckILView } from '@/api/types'
 interface Props {
   il: DeckILView
   lengthUnit: string
+  quantity?: 'M' | 'V'
 }
 
-export function DeckILChart({ il, lengthUnit }: Props) {
+export function DeckILChart({ il, lengthUnit, quantity = 'M' }: Props) {
   const points = il.x.map((x, i) => ({ x, y: il.y[i] }))
+  const etaLabel = `η ${quantity}`
 
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -35,7 +37,7 @@ export function DeckILChart({ il, lengthUnit }: Props) {
         />
         <YAxis tickFormatter={(v: number) => v.toFixed(2)} />
         <Tooltip
-          formatter={(v) => [Number(v).toFixed(3), 'η M']}
+          formatter={(v) => [Number(v).toFixed(3), etaLabel]}
           labelFormatter={(l) => `x = ${Number(l).toFixed(2)} ${lengthUnit}`}
         />
         {il.dead_zones.map(([a, b], i) => (

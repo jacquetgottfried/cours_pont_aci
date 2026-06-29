@@ -45,6 +45,10 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
 - **Balayage** : on promène le véhicule sur toute la poutre. On retient l'effet le plus
   positif (`max`) ET le plus négatif (`min`) — une poutre continue présente les deux
   (ex. soulèvement d'appui). Le cas `governing` est le plus grand en valeur absolue.
+- **Effort tranchant à la coupure (validé)** : la LI de V est discontinue à la section. Le
+  cisaillement **avant** (gauche, négatif = `min`) et **après** (droite, positif = `max`)
+  la coupure sont **deux efforts de calcul distincts** ; on rend les deux (le front les
+  affiche séparément). `governing` = le plus grand en valeur absolue.
 
 ## R6 — Unités
 - Le moteur est **adimensionnel/agnostique** : on lui passe la géométrie dans une unité
@@ -110,12 +114,33 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
   - US (E en pouces, S/X en ft) : positif `26+6.6S`, négatif `48+3.0S`, porte-à-faux `45+10X`.
   - SI (E en mm, S/X en mm) : positif `660+0.55S`, négatif `1220+0.25S`, porte-à-faux `1140+0.833X`.
 - **Moment de calcul par unité de largeur** : `m_LL = MPF · M_bande / E_longueur`
-  (`E_longueur` = E/12 ft en US, E/1000 m en SI). `MPF` = facteur de présence multiple
-  (défaut 1.20, une voie chargée).
-- **Charge permanente** : DC (poids propre dalle) et DW (revêtement) intégrés sur la bande
-  transversale (`w·∫η` aux sections + ; `w·L²/2` au porte-à-faux).
+  (`E_longueur` = E/12 ft en US, E/1000 m en SI).
+- **Charge roulante multi-voies (1 / 2 / 3 voies chargées) — validé** : on construit un
+  **train de roues** où chaque voie chargée apporte 2 roues (gage 1.8 m / 6 ft) et où les
+  voies sont à entraxe `LANE_WIDTH` (3.6 m / 12 ft). On **balaye** ce train (`sweep_effect`)
+  et on retient le max (section positive), le min (section négative) ou le pire (tranchant).
+  Le **facteur de présence multiple (MPF) est ÉDITABLE par nombre de voies** (défauts AASHTO
+  1.20 / 1.00 / 0.85) ; on rend l'effet détaillé pour 1/2/3 voies (transparence) et le
+  **gouvernant** = plus grand `|M_LL|` (`M_LL = MPF · M_bande / E`). Train rigide = simplif.
+  pédagogique (cf. 05).
+- **Charges permanentes** (toujours présentes = chargement complet `full`, cf. R8) :
+  - **DC/DW répartis** (poids dalle, revêtement) : `w·∫η` aux sections, `w·L²/2` au
+    porte-à-faux ;
+  - **Charges ponctuelles DC** *barrière* et *glissière* (charges linéiques le long du pont
+    → ponctuelles sur la bande transversale, intensités/positions propres) : effet `Σ P·η(x)`
+    en section (réutilise `interp`), `Σ P·X` (statique) au porte-à-faux. Détaillées
+    séparément (`M_DC_dist`, `M_DC_barrier`, `M_DC_rail`) pour la transparence.
+  - Le **pattern loading η⁺/η⁻** reste RÉSERVÉ à la charge roulante (R8) ; les permanentes
+    ne sont jamais alternées.
+- **Effort tranchant (V) au longeron intérieur — validé** : section sur LI de V au droit du
+  même longeron intérieur que le moment négatif. Faute de formule de bande AASHTO en
+  cisaillement, on réutilise la **largeur de bande négative** comme dénominateur (choix
+  pédagogique, cf. 05) ; unité par largeur = force/longueur (kN/m | kip/ft). Saut de valeur
+  unitaire de la LI (invariant R3) conservé.
 - **Combinaison Strength I à facteurs ÉDITABLES** : `Mu = γ_DC·M_DC + γ_DW·M_DW + γ_LL·(M_LL+IM)`,
-  défauts γ = 1.25 / 1.50 / 1.75 (l'utilisateur peut les modifier).
+  défauts γ = 1.25 / 1.50 / 1.75 (l'utilisateur peut les modifier). Pour la section
+  tranchant, `Mu` désigne l'effort tranchant factorisé `Vu`.
 - **Agnosticité préservée** (R6) : `deck.py` est un module de bord ; `compute_influence_line`
   n'est jamais appelé avec `unit_system`. Invariants de validation : porte-à-faux
-  `M = P·X·(1+IM)` exact ; symétrie M⁻ ; linéarité en w ; `Mu = Σ γ·M`.
+  `M = P·X·(1+IM)` exact ; charge ponctuelle `P·η` / `P·X` ; symétrie M⁻ ; linéarité en w et
+  en P ; `M_LL = MPF·M_bande/E` par voie ; saut unitaire de V ; `Mu = Σ γ·M`.

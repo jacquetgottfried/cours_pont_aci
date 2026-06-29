@@ -294,7 +294,21 @@ class DeckDesignRequest(BaseModel):
     gamma_dc: float = Field(1.25, gt=0, description="Facteur de charge DC.")
     gamma_dw: float = Field(1.50, gt=0, description="Facteur de charge DW.")
     gamma_ll: float = Field(1.75, gt=0, description="Facteur de charge LL+IM.")
-    mpf: float = Field(1.20, gt=0, description="Facteur de présence multiple.")
+    mpf1: float = Field(1.20, gt=0, description="Présence multiple, 1 voie chargée.")
+    mpf2: float = Field(1.00, gt=0, description="Présence multiple, 2 voies chargées.")
+    mpf3: float = Field(0.85, gt=0, description="Présence multiple, 3 voies chargées.")
+    p_barrier: float = Field(
+        0.0, ge=0, description="Charge ponctuelle barrière DC (kN | kip)."
+    )
+    x_barrier: float = Field(
+        0.0, ge=0, description="Position transversale de la barrière (m | ft)."
+    )
+    p_rail: float = Field(
+        0.0, ge=0, description="Charge ponctuelle glissière DC (kN | kip)."
+    )
+    x_rail: float = Field(
+        0.0, ge=0, description="Position transversale de la glissière (m | ft)."
+    )
     impact: bool = Field(True, description="Majoration dynamique IM=33 %.")
     unit_system: str = Field(
         "SI", description="Système d'unités : 'SI' (m, kN) ou 'US' (ft, kip)."
@@ -338,19 +352,36 @@ class DeckFactors(BaseModel):
     gamma_dc: float
     gamma_dw: float
     gamma_ll: float
-    mpf: float
+    mpf1: float
+    mpf2: float
+    mpf3: float
+
+
+class DeckLaneCase(BaseModel):
+    """Effet de charge roulante pour un nombre de voies chargées donné."""
+
+    n_lanes: int
+    mpf: float = Field(..., description="Facteur de présence multiple appliqué.")
+    M_strip: float = Field(..., description="Effet de la bande (roues, avec IM).")
+    M_LL: float = Field(..., description="Effet par unité de largeur (MPF·M_strip/E).")
 
 
 class DeckSection(BaseModel):
-    """Moments d'une section sur ligne d'influence (positif ou négatif)."""
+    """Effets d'une section sur ligne d'influence (moment +/- ou effort tranchant)."""
 
-    M_DC: float
+    M_DC: float = Field(..., description="DC total (réparti + barrière + glissière).")
+    M_DC_dist: float = Field(..., description="DC réparti (poids dalle), part w·∫η.")
+    M_DC_barrier: float = Field(..., description="DC barrière (charge ponctuelle).")
+    M_DC_rail: float = Field(..., description="DC glissière (charge ponctuelle).")
     M_DW: float
-    M_LL: float = Field(..., description="Moment de charge vive par unité de largeur.")
-    M_strip: float = Field(..., description="Moment de la bande (roues, avec IM).")
+    M_LL: float = Field(..., description="Effet de charge vive gouvernant par largeur.")
+    M_strip: float = Field(..., description="Effet de la bande gouvernant (roues, IM).")
+    live_lanes: List[DeckLaneCase] = Field(
+        ..., description="Détail par nombre de voies (transparence des MPF)."
+    )
     E: float = Field(..., description="Largeur de bande brute (in en US, mm en SI).")
     E_length: float = Field(..., description="Largeur de bande en unité système (ft|m).")
-    Mu: float = Field(..., description="Combinaison Strength I (γ·M).")
+    Mu: float = Field(..., description="Combinaison Strength I (γ·M ou γ·V).")
     target_x: float
 
 
@@ -364,6 +395,9 @@ class DeckOverhangSection(BaseModel):
     """Moments du porte-à-faux (console, statique)."""
 
     M_DC: float
+    M_DC_dist: float = Field(..., description="DC réparti console (w·L²/2).")
+    M_DC_barrier: float = Field(..., description="DC barrière (P·X statique).")
+    M_DC_rail: float = Field(..., description="DC glissière (P·X statique).")
     M_DW: float
     M_LL: float
     M_strip: float
@@ -377,6 +411,7 @@ class DeckOverhangSection(BaseModel):
 class DeckSections(BaseModel):
     positive: DeckSection
     negative: DeckSection
+    shear: DeckSection
     overhang: DeckOverhangSection
 
 
@@ -394,10 +429,11 @@ class DeckILView(BaseModel):
 class DeckILViews(BaseModel):
     positive: DeckILView
     negative: DeckILView
+    shear: DeckILView
 
 
 class DeckDesignResponse(BaseModel):
-    """Résultat du dimensionnement de la dalle (3 sections + IL transversales)."""
+    """Résultat du dimensionnement de la dalle (4 sections + IL transversales)."""
 
     geometry: DeckGeometry
     wheel: DeckWheel
@@ -407,4 +443,8 @@ class DeckDesignResponse(BaseModel):
     unit_effort: str = Field(..., description="Unité de moment (kN·m | kip·ft).")
     unit_line: str = Field(
         ..., description="Unité de moment par largeur (kN·m/m | kip·ft/ft)."
+    )
+    unit_shear: str = Field(..., description="Unité d'effort tranchant (kN | kip).")
+    unit_shear_line: str = Field(
+        ..., description="Unité d'effort tranchant par largeur (kN/m | kip/ft)."
     )

@@ -7,10 +7,13 @@
 
 **Calcul en Python (stable) ; front en migration React/TS.**
 
-## Couche calcul (Python — inchangée, 123 TU verts)
+## Couche calcul (Python — stable, 134 TU verts)
 - `engine/` : `compute_influence_line` (agnostique ; travée simple = mode cinématique du
   noyau de K) + `vehicle_loads` (HL-93) + `distributed_loads` (DC/DW) + `deck` (dalle,
   bande équivalente AASHTO). Backend FastAPI : toutes les routes + CORS ouvert.
+- `deck` étendu : 4 sections (positif, négatif, **effort tranchant** au longeron intérieur,
+  porte-à-faux) ; charges permanentes DC/DW réparties **+ barrière/glissière ponctuelles**
+  (décomposées) ; charge roulante **1/2/3 voies** (MPF éditables 1.20/1.00/0.85).
 
 ## Front React `web/` (PRINCIPAL désormais)
 - Vite + TS strict, Tailwind + shadcn/ui, TanStack Query, Recharts, React Konva.
@@ -21,8 +24,9 @@
   - *Charges permanentes DC/DW* : chargement alterné (damier) — zones chargées ombrées sur
     la LI (`/distributed-effect`) + 2 lignes d'enveloppe M et V (`/distributed-envelope`)
     avec M⁻ max aux appuis ◆ et M⁺ max en travée ▲.
-- **Onglet Tablier** : `/deck-design` live ; coupe transversale Konva, tableau 3 sections
-  (M_DC/M_DW/M_LL+IM/E/Mu), 2 LI transversales (positif/négatif).
+- **Onglet Tablier** : `/deck-design` live ; coupe transversale Konva (roues + charges
+  ponctuelles barrière/glissière), tableaux moments + effort tranchant + décomposition M_DC
+  + effet par voies (MPF transparents), 3 LI transversales (positif/négatif/tranchant).
 
 ## Legacy (référence)
 - `frontend/` (vanilla + Chart.js) : couvre tout (poutre, HL-93, DC/DW, enveloppes M/V,
@@ -34,4 +38,4 @@
 
 ## Lancer
 - `run.bat` (backend `:8000` + front React `:5173`)
-- Tests : `pytest tests/` (123) ; `cd web && npm run test` (12)
+- Tests : `pytest tests/` (134) ; `cd web && npm run test` (14)

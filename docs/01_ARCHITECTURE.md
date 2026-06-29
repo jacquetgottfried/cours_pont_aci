@@ -56,7 +56,9 @@ resultats/            # CSV historiques (majoritairement faux, voir 05) ; LIVE =
 - **La dalle réutilise le même moteur** : c'est une poutre continue TRANSVERSALE (appuis =
   longerons, extrémités libres = porte-à-faux). `deck.py` appelle `compute_influence_line`
   avec des `supports` aux positions de longerons, puis applique la largeur de bande E.
-- **UI à onglets** (shadcn Tabs) : « Poutre longitudinale » (LI live, position critique
-  HL-93) et « Tablier (dalle) » (bande équivalente, coupe transversale, 3 sections).
-  Bascule SI/US par onglet. Deux colonnes : entrées | sorties. Konva pour les éditeurs
-  interactifs, Recharts pour les courbes.
+- **UI à onglets** (shadcn Tabs) : « Poutre longitudinale » et « Tablier (dalle) ».
+  L'onglet Poutre a une **géométrie partagée** (travées, dx, grandeur, section) + deux
+  **sous-onglets** : « Charge mobile HL-93 » (LI live, position critique, V avant/après
+  coupure) et « Charges permanentes DC/DW » (damier ombré + enveloppes M et V). Le Tablier
+  donne la bande équivalente (coupe transversale, 3 sections). Konva pour les éditeurs,
+  Recharts pour les courbes. `SectionView` factorise éditeur + LI (overlay convoi OU zones).

@@ -52,7 +52,8 @@ function NumField({
 
 export function DeckControls({ req, catalog, onChange, onUnitSystem }: Props) {
   const lu = lengthUnit(req.unit_system)
-  const wu = `${forceUnit(req.unit_system)}/${lu}`
+  const fu = forceUnit(req.unit_system)
+  const wu = `${fu}/${lu}`
 
   return (
     <div className="grid gap-4">
@@ -105,7 +106,7 @@ export function DeckControls({ req, catalog, onChange, onUnitSystem }: Props) {
         />
       </div>
 
-      <p className="text-sm font-medium">Charges permanentes</p>
+      <p className="text-sm font-medium">Charges permanentes réparties</p>
       <div className="grid grid-cols-2 gap-3">
         <NumField
           id="wdc"
@@ -123,30 +124,87 @@ export function DeckControls({ req, catalog, onChange, onUnitSystem }: Props) {
         />
       </div>
 
-      <p className="text-sm font-medium">Charge vive (roue HL-93)</p>
+      <p className="text-sm font-medium">Charges ponctuelles DC (bord)</p>
       <p className="text-xs text-muted-foreground">
-        {catalog
-          ? `P = ${catalog.P} ${forceUnit(req.unit_system)} · gage = ${catalog.gage} ${lu} · IM = ${Math.round(catalog.im * 100)} %`
-          : 'roue : —'}
+        Barrière et glissière : charges linéiques le long du pont → ponctuelles sur la
+        bande transversale (x depuis le bord). Effet `P·η` en section, `P·X` au
+        porte-à-faux.
       </p>
       <div className="grid grid-cols-2 gap-3">
         <NumField
-          id="mpf"
-          label="Présence multiple (MPF)"
-          value={req.mpf}
+          id="pb"
+          label={`Barrière P (${fu})`}
+          value={req.p_barrier}
+          min={0}
+          onChange={(p_barrier) => onChange({ p_barrier })}
+        />
+        <NumField
+          id="xb"
+          label={`Barrière x (${lu})`}
+          value={req.x_barrier}
+          min={0}
+          onChange={(x_barrier) => onChange({ x_barrier })}
+        />
+        <NumField
+          id="pr"
+          label={`Glissière P (${fu})`}
+          value={req.p_rail}
+          min={0}
+          onChange={(p_rail) => onChange({ p_rail })}
+        />
+        <NumField
+          id="xr"
+          label={`Glissière x (${lu})`}
+          value={req.x_rail}
+          min={0}
+          onChange={(x_rail) => onChange({ x_rail })}
+        />
+      </div>
+
+      <p className="text-sm font-medium">Charge vive (roue HL-93)</p>
+      <p className="text-xs text-muted-foreground">
+        {catalog
+          ? `P = ${catalog.P} ${fu} · gage = ${catalog.gage} ${lu} · IM = ${Math.round(catalog.im * 100)} %`
+          : 'roue : —'}
+      </p>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="size-4"
+          checked={req.impact}
+          onChange={(e) => onChange({ impact: e.target.checked })}
+        />
+        Majoration dynamique IM
+      </label>
+      <p className="text-xs text-muted-foreground">
+        Présence multiple (MPF) par nombre de voies chargées — balayées, effet le plus
+        défavorable retenu.
+      </p>
+      <div className="grid grid-cols-3 gap-3">
+        <NumField
+          id="mpf1"
+          label="MPF 1 voie"
+          value={req.mpf1}
           step="0.05"
           min={0.1}
-          onChange={(mpf) => onChange({ mpf })}
+          onChange={(mpf1) => onChange({ mpf1 })}
         />
-        <label className="flex items-end gap-2 pb-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4"
-            checked={req.impact}
-            onChange={(e) => onChange({ impact: e.target.checked })}
-          />
-          Majoration IM
-        </label>
+        <NumField
+          id="mpf2"
+          label="MPF 2 voies"
+          value={req.mpf2}
+          step="0.05"
+          min={0.1}
+          onChange={(mpf2) => onChange({ mpf2 })}
+        />
+        <NumField
+          id="mpf3"
+          label="MPF 3 voies"
+          value={req.mpf3}
+          step="0.05"
+          min={0.1}
+          onChange={(mpf3) => onChange({ mpf3 })}
+        />
       </div>
 
       <p className="text-sm font-medium">Facteurs de charge (Strength I)</p>

@@ -38,12 +38,19 @@ export interface DeckSystemDefaults {
   dx: number
   wdc: number
   wdw: number
+  pb: number // charge ponctuelle barrière DC (force)
+  xb: number // position transversale barrière
+  xr: number // position transversale glissière (charge nulle par défaut)
 }
 
 export const DECK_DEFAULTS: Record<UnitSystem, DeckSystemDefaults> = {
-  SI: { n: 6, s: 2.4, oh: 1.0, dx: 0.1, wdc: 7.0, wdw: 1.2 },
-  US: { n: 6, s: 8, oh: 3.25, dx: 0.25, wdc: 0.15, wdw: 0.025 },
+  SI: { n: 6, s: 2.4, oh: 1.0, dx: 0.1, wdc: 7.0, wdw: 1.2, pb: 7.0, xb: 0.0, xr: 0.3 },
+  US: { n: 6, s: 8, oh: 3.25, dx: 0.25, wdc: 0.15, wdw: 0.025, pb: 0.5, xb: 0.0, xr: 1.0 },
 }
+
+/** Effort tranchant par unité de largeur : kN/m (SI) ou kip/ft (US). */
+export const shearLineUnit = (sys: UnitSystem): string =>
+  `${forceUnit(sys)}/${lengthUnit(sys)}`
 
 /** Unité d'un effet : force·longueur pour le moment, force seule sinon. */
 export function effectUnit(q: Quantity, sys: UnitSystem): string {

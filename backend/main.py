@@ -190,9 +190,10 @@ def deck_catalog(unit_system: str = "SI"):
 def deck_design_route(req: DeckDesignRequest):
     """Dimensionne la dalle de tablier par la méthode de la bande équivalente (AASHTO).
 
-    Renvoie, pour 3 sections (positif mi-baie, négatif sur longeron, porte-à-faux), les
-    moments DC, DW, LL+IM (par unité de largeur, via la largeur de bande E) et la
-    combinaison Mu = γ_DC·M_DC + γ_DW·M_DW + γ_LL·(M_LL+IM), facteurs éditables.
+    Renvoie, pour 4 sections (positif mi-baie, négatif sur longeron, effort tranchant sur
+    longeron, porte-à-faux), les effets DC (réparti + barrière/glissière ponctuelles), DW,
+    LL+IM par unité de largeur (via la largeur de bande E), le détail par 1/2/3 voies
+    chargées (MPF éditables) et la combinaison Mu = γ_DC·M_DC + γ_DW·M_DW + γ_LL·(M_LL+IM).
     """
     try:
         result = deck_design(
@@ -206,7 +207,13 @@ def deck_design_route(req: DeckDesignRequest):
             gamma_dc=req.gamma_dc,
             gamma_dw=req.gamma_dw,
             gamma_ll=req.gamma_ll,
-            mpf=req.mpf,
+            mpf1=req.mpf1,
+            mpf2=req.mpf2,
+            mpf3=req.mpf3,
+            p_barrier=req.p_barrier,
+            x_barrier=req.x_barrier,
+            p_rail=req.p_rail,
+            x_rail=req.x_rail,
             impact=req.impact,
         )
     except (ValueError, RuntimeError) as exc:

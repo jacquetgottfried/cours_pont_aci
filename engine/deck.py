@@ -9,12 +9,25 @@ La « largeur de bande équivalente » E (AASHTO LRFD Table 4.6.2.1.3-1) convert
 moment des roues sur la bande en moment par unité de largeur de dalle :
     m_LL = MPF · M_bande / E_longueur      (kN·m/m en SI, kip·ft/ft en US)
 
-Trois sections de calcul :
+Quatre sections de calcul :
   - **Moment positif** : à mi-baie intérieure (ligne d'influence + balayage des roues) ;
   - **Moment négatif** : au droit d'un longeron INTÉRIEUR (jamais l'extérieur : la rotule
     à l'appui de rive ferait « battre » le porte-à-faux → matrice singulière) ;
+  - **Effort tranchant** : au droit du même longeron intérieur (LI de V). Faute de formule
+    de bande AASHTO en cisaillement, on réutilise la largeur de bande NÉGATIVE comme
+    dénominateur (choix pédagogique, cf. doc 05) ; unité kN/m | kip/ft par largeur ;
   - **Porte-à-faux** : traité par STATIQUE (console isostatique) — `M = ΣP·X·(1+IM)` pour
-    les roues, `w·L²/2` pour les charges permanentes — sans ligne d'influence.
+    les roues, `w·L²/2` pour les charges réparties — sans ligne d'influence.
+
+Charges prises en compte :
+  - **DC/DW répartis** (poids dalle, revêtement) : effet `w·∫η`, en chargement COMPLET
+    (`full`) — charges permanentes toujours présentes (cf. doc 04 R8) ;
+  - **Charges ponctuelles permanentes** (barrière, glissière), DC : effet `P·η` en section
+    (réutilise `interp`), `P·X` au porte-à-faux. Détaillées séparément (transparence) ;
+  - **Charge roulante** : cas 1 / 2 / 3 voies chargées (train de roues à entraxe de voie
+    `LANE_WIDTH`, balayé par `sweep_effect`), avec facteurs de présence multiple (MPF)
+    ÉDITABLES (défauts 1.20 / 1.00 / 0.85). On retient l'effet positif, négatif ou
+    gouvernant selon la section. Le pattern loading η⁺/η⁻ reste réservé au live.
 
 Combinaison Strength I à facteurs ÉDITABLES :
     Mu = γ_DC·M_DC + γ_DW·M_DW + γ_LL·(M_LL+IM)   (défauts 1.25 / 1.50 / 1.75).
@@ -28,7 +41,7 @@ from __future__ import annotations
 
 from .distributed_loads import distributed_effect
 from .influence_line import compute_influence_line
-from .vehicle_loads import HL93, IM, Axle, _system, effect_unit, sweep_effect
+from .vehicle_loads import HL93, IM, Axle, _system, effect_unit, interp, sweep_effect
 
 # Constantes de roue de calcul par système (valeurs réglementaires, jamais converties).
 # gage = écartement transversal des roues d'un essieu ; edge_offset = recul de la roue
@@ -37,6 +50,9 @@ WHEEL = {
     "SI": {"gage": 1.8, "edge_offset": 0.3},
     "US": {"gage": 6.0, "edge_offset": 1.0},
 }
+
+# Largeur de voie de calcul AASHTO (entraxe transversal des essieux d'un train de voies).
+LANE_WIDTH = {"SI": 3.6, "US": 12.0}
 
 _KINDS = ("positive", "negative", "overhang")
 
@@ -126,6 +142,102 @@ def effect_unit_per_width(unit_system):
     return f"{s['force_unit']}·{s['length_unit']}/{s['length_unit']}"
 
 
+def shear_unit_per_width(unit_system):
+    """Unité d'un effort tranchant par unité de largeur : kN/m (SI) ou kip/ft (US)."""
+    s = _system(unit_system)
+    return f"{s['force_unit']}/{s['length_unit']}"
+
+
+# ----------------------------------------------------------------------------------
+# Charges ponctuelles permanentes (barrière, glissière) — DC
+# ----------------------------------------------------------------------------------
+def point_load_effect(li_x, li_y, loads):
+    """Effet de charges ponctuelles permanentes sur une LI : `effet = Σ P·η(x)`.
+
+    `loads` : liste de {"name", "P", "x"} (P en force, x abscisse transversale). Renvoie
+    {name: P·η(x)} + "total". Effet par unité de largeur (bande unitaire), homogène à
+    M_DC réparti. Réutilise `interp` (roue hors bande -> ordonnée d'extrémité).
+    """
+    out = {"total": 0.0}
+    for ld in loads:
+        e = ld["P"] * interp(li_x, li_y, ld["x"])
+        out[ld["name"]] = e
+        out["total"] += e
+    return out
+
+
+def overhang_point_moment(geom, loads):
+    """Moment statique des charges ponctuelles permanentes sur le porte-à-faux (`P·X`).
+
+    Seules les charges effectivement sur le porte-à-faux (x < longeron de rive) comptent.
+    Renvoie {name: P·X} + "total".
+    """
+    girder0 = geom["girders"][0]
+    out = {"total": 0.0}
+    for ld in loads:
+        lever = girder0 - ld["x"]
+        e = ld["P"] * lever if lever > 1e-9 else 0.0
+        out[ld["name"]] = e
+        out["total"] += e
+    return out
+
+
+# ----------------------------------------------------------------------------------
+# Charge roulante multi-voies (1 / 2 / 3 voies chargées)
+# ----------------------------------------------------------------------------------
+def lane_train(wheel, n_lanes, unit_system):
+    """Train de roues transversal pour `n_lanes` voies chargées.
+
+    Chaque voie apporte 2 roues espacées du `gage` ; les voies sont à entraxe
+    `LANE_WIDTH`. Le balayage `sweep_effect` optimise ensuite le positionnement absolu
+    du train sur la bande (roues hors bande ignorées nativement). Simplification
+    pédagogique : train rigide de voies à entraxe constant (cf. doc 05).
+    """
+    lw = LANE_WIDTH[unit_system]
+    gage = wheel["gage"]
+    p = wheel["P"]
+    axles = []
+    for k in range(n_lanes):
+        base = k * lw
+        axles.append(Axle(base, p))
+        axles.append(Axle(base + gage, p))
+    return axles
+
+
+def live_lane_cases(li_x, li_y, wheel, mpf_list, unit_system, which, e_length, impact):
+    """Effet de charge roulante pour 1 / 2 / 3 voies chargées (MPF éditables).
+
+    `which` ∈ {'positive', 'negative', 'governing'} : retient le max, le min, ou le pire
+    de max/min du balayage. `mpf_list = [mpf1, mpf2, mpf3]`. Renvoie
+    {cases: [{n_lanes, mpf, M_strip, M_LL}], governing: <cas dominant>, wheels: [...]}.
+    Le cas gouvernant est celui de plus grand |M_LL| (MPF appliqué).
+    """
+    cases = []
+    gov = None
+    gov_wheels = []
+    for n in (1, 2, 3):
+        axles = lane_train(wheel, n, unit_system)
+        env = sweep_effect(li_x, li_y, axles, impact=impact)
+        if which == "positive":
+            pick = env["max"]
+        elif which == "negative":
+            pick = env["min"]
+        else:  # governing : pire de max / min
+            pick = env["governing"]
+        m_strip = pick["value"]
+        mpf = mpf_list[n - 1]
+        m_ll = mpf * m_strip / e_length
+        case = {"n_lanes": n, "mpf": mpf, "M_strip": m_strip, "M_LL": m_ll}
+        cases.append(case)
+        if gov is None or abs(m_ll) > abs(gov["M_LL"]):
+            gov = case
+            gov_wheels = pick["axle_positions"]
+    return {"cases": cases, "governing": gov, "wheels": gov_wheels}
+
+
+# ----------------------------------------------------------------------------------
+# Statique du porte-à-faux (console)
+# ----------------------------------------------------------------------------------
 def overhang_live_moment(geom, wheel, impact=True):
     """Moment de charge vive au droit du longeron de rive, par STATIQUE (console).
 
@@ -148,7 +260,7 @@ def overhang_live_moment(geom, wheel, impact=True):
 
 
 def overhang_dead_moment(geom, w_dc, w_dw):
-    """Moment de charge permanente au droit du longeron de rive (console : w·L²/2)."""
+    """Moment de charge répartie permanente au droit du longeron de rive (console : w·L²/2)."""
     lc = geom["overhang"]
     half = lc * lc / 2.0
     return {
@@ -159,38 +271,62 @@ def overhang_dead_moment(geom, w_dc, w_dw):
     }
 
 
-def _il_section(geom, target_x, wheel, w_dc, w_dw, which, unit_system, impact):
-    """Calcule une section sur ligne d'influence (positif ou négatif).
+# ----------------------------------------------------------------------------------
+# Section sur ligne d'influence (moment positif / négatif, effort tranchant)
+# ----------------------------------------------------------------------------------
+def _il_section(
+    geom,
+    target_x,
+    quantity,
+    which,
+    strip_kind,
+    wheel,
+    mpf_list,
+    w_dc,
+    w_dw,
+    point_loads,
+    unit_system,
+    impact,
+):
+    """Calcule une section sur ligne d'influence (moment +/- ou effort tranchant).
 
-    `which` ∈ {'positive', 'negative'} : on retient le max (positif) ou le min (négatif)
-    du balayage des roues. Renvoie le dict de section + la vue d'IL pour le frontend.
+    `quantity` ∈ {'M', 'V'} ; `which` ∈ {'positive', 'negative', 'governing'} pour le
+    balayage live ; `strip_kind` ∈ {'positive', 'negative'} = type de bande pour E.
+    Combine : DC/DW répartis (full), charges ponctuelles DC (barrière/glissière), et la
+    charge roulante 1/2/3 voies. Renvoie (section, vue d'IL pour le frontend).
     """
     li = compute_influence_line(
-        [geom["total"]], "M", target_x, dx=geom["dx"], supports=geom["girders"]
+        [geom["total"]], quantity, target_x, dx=geom["dx"], supports=geom["girders"]
     )
-    axles = [Axle(0.0, wheel["P"]), Axle(wheel["gage"], wheel["P"])]
-    env = sweep_effect(li["x"], li["y"], axles, impact=impact)
-    m_strip = env["max"]["value"] if which == "positive" else env["min"]["value"]
-    e_raw = strip_width(which, geom["spacing"], unit_system)
-    m_ll = wheel["mpf"] * m_strip / strip_length(e_raw, unit_system)
+    e_raw = strip_width(strip_kind, geom["spacing"], unit_system)
+    e_length = strip_length(e_raw, unit_system)
+    live = live_lane_cases(
+        li["x"], li["y"], wheel, mpf_list, unit_system, which, e_length, impact
+    )
     dead = distributed_effect(li["x"], li["y"], w_dc, w_dw)["full"]
+    pts = point_load_effect(li["x"], li["y"], point_loads)
     il_view = {
         "x": li["x"],
         "y": li["y"],
         "target_x": float(target_x),
         "support_positions": li["meta"]["support_positions"],
-        "wheels": env["governing"]["axle_positions"],
+        "wheels": live["wheels"],
         "dead_zones": dead["zones"],
     }
-    return {
-        "M_DC": dead["dc"],
+    section = {
+        "M_DC": dead["dc"] + pts["total"],
+        "M_DC_dist": dead["dc"],
+        "M_DC_barrier": pts.get("barrier", 0.0),
+        "M_DC_rail": pts.get("rail", 0.0),
         "M_DW": dead["dw"],
-        "M_LL": m_ll,
-        "M_strip": m_strip,
+        "M_LL": live["governing"]["M_LL"],
+        "M_strip": live["governing"]["M_strip"],
+        "live_lanes": live["cases"],
         "E": e_raw,
-        "E_length": strip_length(e_raw, unit_system),
+        "E_length": e_length,
         "target_x": float(target_x),
-    }, il_view
+    }
+    return section, il_view
 
 
 def deck_design(
@@ -204,19 +340,31 @@ def deck_design(
     gamma_dc=1.25,
     gamma_dw=1.50,
     gamma_ll=1.75,
-    mpf=1.20,
+    mpf1=1.20,
+    mpf2=1.00,
+    mpf3=0.85,
+    p_barrier=0.0,
+    x_barrier=0.0,
+    p_rail=0.0,
+    x_rail=0.0,
     impact=True,
 ):
-    """Dimensionne la dalle : moments DC, DW, LL+IM et combinaison Mu, par section.
+    """Dimensionne la dalle : moments/effort tranchant DC, DW, LL+IM et combinaison Mu.
 
-    Sections : positif (mi-baie intérieure), négatif (longeron intérieur), porte-à-faux
-    (statique). Réutilise `compute_influence_line` + `sweep_effect` + `distributed_effect`.
-    `gamma_*` et `mpf` sont éditables. Renvoie un dict structuré + les IL transversales.
+    Sections : positif (mi-baie intérieure), négatif (longeron intérieur), effort
+    tranchant (même longeron), porte-à-faux (statique). Réutilise `compute_influence_line`
+    + `sweep_effect` + `distributed_effect` + `interp`. `gamma_*`, les trois MPF
+    (1/2/3 voies) et les charges ponctuelles barrière/glissière sont éditables. Renvoie
+    un dict structuré + les IL transversales.
     """
     geom = deck_geometry(n_girders, spacing, overhang, dx)
     wheel = design_wheel(unit_system)
-    wheel["mpf"] = mpf
+    mpf_list = [mpf1, mpf2, mpf3]
     girders = geom["girders"]
+    point_loads = [
+        {"name": "barrier", "P": p_barrier, "x": x_barrier},
+        {"name": "rail", "P": p_rail, "x": x_rail},
+    ]
 
     def factored(m_dc, m_dw, m_ll):
         return gamma_dc * m_dc + gamma_dw * m_dw + gamma_ll * m_ll
@@ -224,34 +372,47 @@ def deck_design(
     # --- Positif : mi-baie intérieure (entre longerons 1 et 2, 0-indexés) ---
     bay_mid = girders[1] + spacing / 2.0
     pos, il_pos = _il_section(
-        geom, bay_mid, wheel, w_dc, w_dw, "positive", unit_system, impact
+        geom, bay_mid, "M", "positive", "positive",
+        wheel, mpf_list, w_dc, w_dw, point_loads, unit_system, impact,
     )
     pos["Mu"] = factored(pos["M_DC"], pos["M_DW"], pos["M_LL"])
 
     # --- Négatif : au droit d'un longeron INTÉRIEUR (jamais le longeron de rive) ---
     neg, il_neg = _il_section(
-        geom, girders[1], wheel, w_dc, w_dw, "negative", unit_system, impact
+        geom, girders[1], "M", "negative", "negative",
+        wheel, mpf_list, w_dc, w_dw, point_loads, unit_system, impact,
     )
     neg["Mu"] = factored(neg["M_DC"], neg["M_DW"], neg["M_LL"])
+
+    # --- Effort tranchant : même longeron intérieur (LI de V ; bande négative pour E) ---
+    shear, il_shear = _il_section(
+        geom, girders[1], "V", "governing", "negative",
+        wheel, mpf_list, w_dc, w_dw, point_loads, unit_system, impact,
+    )
+    shear["Mu"] = factored(shear["M_DC"], shear["M_DW"], shear["M_LL"])
 
     # --- Porte-à-faux : statique (console), sans ligne d'influence ---
     oh_live = overhang_live_moment(geom, wheel, impact)
     oh_dead = overhang_dead_moment(geom, w_dc, w_dw)
+    oh_pts = overhang_point_moment(geom, point_loads)
     e_oh = strip_width("overhang", oh_live["X"], unit_system)
-    m_ll_oh = mpf * oh_live["M"] / strip_length(e_oh, unit_system)
+    e_oh_len = strip_length(e_oh, unit_system)
+    m_ll_oh = mpf1 * oh_live["M"] / e_oh_len  # essieu unique = 1 voie -> mpf1
+    m_dc_oh = oh_dead["dc"] + oh_pts["total"]
     overhang_section = {
-        "M_DC": oh_dead["dc"],
+        "M_DC": m_dc_oh,
+        "M_DC_dist": oh_dead["dc"],
+        "M_DC_barrier": oh_pts.get("barrier", 0.0),
+        "M_DC_rail": oh_pts.get("rail", 0.0),
         "M_DW": oh_dead["dw"],
         "M_LL": m_ll_oh,
         "M_strip": oh_live["M"],
         "E": e_oh,
-        "E_length": strip_length(e_oh, unit_system),
+        "E_length": e_oh_len,
         "X": oh_live["X"],
         "wheels": oh_live["wheels"],
     }
-    overhang_section["Mu"] = factored(
-        overhang_section["M_DC"], overhang_section["M_DW"], overhang_section["M_LL"]
-    )
+    overhang_section["Mu"] = factored(m_dc_oh, oh_dead["dw"], m_ll_oh)
 
     return {
         "geometry": geom,
@@ -260,14 +421,23 @@ def deck_design(
             "gamma_dc": gamma_dc,
             "gamma_dw": gamma_dw,
             "gamma_ll": gamma_ll,
-            "mpf": mpf,
+            "mpf1": mpf1,
+            "mpf2": mpf2,
+            "mpf3": mpf3,
         },
         "sections": {
             "positive": pos,
             "negative": neg,
+            "shear": shear,
             "overhang": overhang_section,
         },
-        "influence_lines": {"positive": il_pos, "negative": il_neg},
+        "influence_lines": {
+            "positive": il_pos,
+            "negative": il_neg,
+            "shear": il_shear,
+        },
         "unit_effort": effect_unit(unit_system, "M"),
         "unit_line": effect_unit_per_width(unit_system),
+        "unit_shear": effect_unit(unit_system, "V"),
+        "unit_shear_line": shear_unit_per_width(unit_system),
     }

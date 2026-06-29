@@ -168,34 +168,50 @@ Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-
     "spacing": 8,          // entraxe S (ft | m), >0
     "overhang": 3.25,      // porte-à-faux (ft | m), ≥0
     "dx": 0.25,            // discrétisation transversale ; doit diviser la grille
-    "w_dc": 0.15,          // DC dalle (kip/ft | kN/m), ≥0
-    "w_dw": 0.025,         // DW revêtement, ≥0 ; au moins une des deux > 0
+    "w_dc": 0.15,          // DC dalle réparti (kip/ft | kN/m), ≥0
+    "w_dw": 0.025,         // DW revêtement réparti, ≥0 ; au moins une des deux > 0
     "gamma_dc": 1.25, "gamma_dw": 1.50, "gamma_ll": 1.75,  // facteurs éditables
-    "mpf": 1.20,           // facteur de présence multiple
+    "mpf1": 1.20, "mpf2": 1.00, "mpf3": 0.85,  // présence multiple, 1/2/3 voies (éditables)
+    "p_barrier": 0.5, "x_barrier": 0.0,   // charge ponctuelle DC barrière (force) + position
+    "p_rail": 0.0, "x_rail": 1.0,         // charge ponctuelle DC glissière (force) + position
     "impact": true,        // IM = 33 %
     "unit_system": "US"
   }
   ```
+  Les charges ponctuelles `p_barrier`/`p_rail` (≥0, nulles par défaut) sont des charges
+  linéiques DC le long du pont, vues comme ponctuelles sur la bande transversale à
+  `x_barrier`/`x_rail` (≥0, depuis le bord).
 - Réponse 200 :
   ```json
   {
     "geometry": {"total":46.5,"girders":[...],"overhang":3.25,"spacing":8,"n_girders":6,"dx":0.25},
     "wheel": {"P":16.0,"gage":6.0,"edge_offset":1.0,"im":0.33},
-    "factors": {"gamma_dc":1.25,"gamma_dw":1.50,"gamma_ll":1.75,"mpf":1.20},
+    "factors": {"gamma_dc":1.25,"gamma_dw":1.50,"gamma_ll":1.75,"mpf1":1.20,"mpf2":1.00,"mpf3":0.85},
     "sections": {
-      "positive": {"M_DC":...,"M_DW":...,"M_LL":...,"M_strip":...,"E":78.8,"E_length":...,"Mu":...,"target_x":...},
+      "positive": {"M_DC":...,"M_DC_dist":...,"M_DC_barrier":...,"M_DC_rail":...,"M_DW":...,
+                   "M_LL":...,"M_strip":...,"live_lanes":[{"n_lanes":1,"mpf":1.2,"M_strip":...,"M_LL":...},...],
+                   "E":78.8,"E_length":...,"Mu":...,"target_x":...},
       "negative": {... "target_x": longeron intérieur ...},
-      "overhang": {... "X":2.25, "wheels":[{"x","X","P"}] ...}   // statique, sans IL
+      "shear":    {... idem, target_x = même longeron intérieur ; effort tranchant ...},
+      "overhang": {... "M_DC_dist/barrier/rail":..., "X":2.25, "wheels":[{"x","X","P"}] ...}  // statique
     },
     "influence_lines": {
       "positive": {"x":[...],"y":[...],"target_x":...,"support_positions":[...],
                    "wheels":[{"x","load"}],"dead_zones":[[x0,x1]]},
-      "negative": {... idem ...}
+      "negative": {... idem ...},
+      "shear":    {... LI de V (x dédoublé au saut) ...}
     },
-    "unit_effort": "kip·ft", "unit_line": "kip·ft/ft"
+    "unit_effort": "kip·ft", "unit_line": "kip·ft/ft",
+    "unit_shear": "kip", "unit_shear_line": "kip/ft"
   }
   ```
-  `M_DC/M_DW/M_LL/Mu` sont par unité de largeur (`unit_line`). `E` est la largeur de bande
-  brute (pouces en US, mm en SI). `M_strip` = moment de la bande (roues, avec IM).
+  Sections `positive`/`negative` : moments par unité de largeur (`unit_line`). Section
+  `shear` : efforts par unité de largeur (`unit_shear_line` = force/longueur) — `Mu` y est
+  l'effort tranchant factorisé `Vu`. `M_DC` = `M_DC_dist` (réparti) + `M_DC_barrier` +
+  `M_DC_rail` (transparence). `live_lanes` détaille l'effet vif pour 1/2/3 voies (MPF par
+  voie) ; `M_LL`/`M_strip` de la section = cas gouvernant (plus grand `|M_LL|`). `E` est la
+  largeur de bande brute (pouces US, mm SI) ; pour la section `shear`, c'est la bande
+  négative (pas de formule de bande en cisaillement, cf. 05 D14).
 - Erreurs : `400` (métier : `dx` hors grille, géométrie incohérente), `422` (deux charges
-  nulles, `n_girders<2`, facteur ≤ 0, `unit_system` invalide).
+  réparties nulles, `n_girders<2`, facteur/MPF ≤ 0, charge ponctuelle/position < 0,
+  `unit_system` invalide).

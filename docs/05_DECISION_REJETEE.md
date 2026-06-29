@@ -103,3 +103,29 @@ statique servi par FastAPI ou ouvert tel quel. Stack : React + TS strict, Tailwi
 shadcn/ui, TanStack Query (isole le fetch du rendu), Recharts (courbes), React Konva
 (éditeurs). L'ancien front `frontend/` (vanilla + Chart.js) est conservé en référence de
 portage jusqu'à parité, puis sera retiré.
+
+## D13 — Pattern loading η⁺/η⁻ sur les charges permanentes du tablier (rejeté)
+Tentation : appliquer aux DC/DW (et barrière/glissière) le chargement alterné η⁺/η⁻ pour en
+sortir un « M⁺/M⁻ permanent ». Rejeté : une charge **permanente** est TOUJOURS présente
+(chargement complet `full`, cf. 04 R8/D8) — on ne peut pas en retirer une partie. Le pattern
+loading η⁺/η⁻ n'a de sens que pour les charges **variables** (la charge roulante). Retenu :
+permanentes en `full`, pattern loading réservé au live (max = section positive, min =
+section négative). La transparence demandée est satisfaite par la **décomposition** de M_DC
+(réparti / barrière / glissière) et le **détail par nombre de voies** (MPF par voie).
+
+## D14 — Formule de bande équivalente pour l'effort tranchant du tablier (rejeté faute de norme)
+Pour la section d'effort tranchant (nouvelle), il n'existe **pas de formule de bande E en
+cisaillement** dans l'AASHTO LRFD Table 4.6.2.1.3-1 (la méthode de la bande est définie pour
+les **moments** ; la dalle conçue par cette méthode n'a en général pas à être vérifiée au
+cisaillement, C4.6.2.1.6). Plutôt qu'inventer une formule, on **réutilise la largeur de bande
+NÉGATIVE** (`48+3S` / `1220+0.25S`) comme dénominateur du tranchant par unité de largeur
+(`V_LL = MPF·V_bande/E`), au droit du longeron intérieur. C'est un **choix pédagogique
+explicite** (cohérent avec la section de moment négatif au même point), documenté comme tel.
+
+## D15 — Positionnement indépendant des camions multi-voies (écarté pour l'instant)
+Pour le cas 2/3 voies chargées, on aurait pu optimiser **indépendamment** la position de
+chaque camion (recherche combinatoire) pour maximiser l'effet transversal. Écarté : lourd et
+peu pédagogique. Retenu : un **train de roues rigide** où les voies sont à entraxe constant
+`LANE_WIDTH` (3.6 m / 12 ft) ; on balaye ce train d'un bloc (`sweep_effect`), ce qui optimise
+déjà sa position absolue sur la bande. Les roues hors bande ne contribuent pas (gérées
+nativement par `load_effect`). Une optimisation indépendante reste une évolution possible.

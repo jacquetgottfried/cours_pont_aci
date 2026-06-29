@@ -128,7 +128,13 @@ export interface DeckDesignRequest {
   gamma_dc: number
   gamma_dw: number
   gamma_ll: number
-  mpf: number
+  mpf1: number
+  mpf2: number
+  mpf3: number
+  p_barrier: number
+  x_barrier: number
+  p_rail: number
+  x_rail: number
   impact: boolean
   unit_system: UnitSystem
 }
@@ -142,11 +148,22 @@ export interface DeckGeometry {
   dx: number
 }
 
+export interface DeckLaneCase {
+  n_lanes: number
+  mpf: number
+  M_strip: number
+  M_LL: number
+}
+
 export interface DeckSection {
   M_DC: number
+  M_DC_dist: number
+  M_DC_barrier: number
+  M_DC_rail: number
   M_DW: number
   M_LL: number
   M_strip: number
+  live_lanes: DeckLaneCase[]
   E: number
   E_length: number
   Mu: number
@@ -161,6 +178,9 @@ export interface DeckOverhangWheel {
 
 export interface DeckOverhangSection {
   M_DC: number
+  M_DC_dist: number
+  M_DC_barrier: number
+  M_DC_rail: number
   M_DW: number
   M_LL: number
   M_strip: number
@@ -183,16 +203,27 @@ export interface DeckILView {
 export interface DeckDesignResponse {
   geometry: DeckGeometry
   wheel: { P: number; gage: number; edge_offset: number; im: number }
-  factors: { gamma_dc: number; gamma_dw: number; gamma_ll: number; mpf: number }
+  factors: {
+    gamma_dc: number
+    gamma_dw: number
+    gamma_ll: number
+    mpf1: number
+    mpf2: number
+    mpf3: number
+  }
   sections: {
     positive: DeckSection
     negative: DeckSection
+    shear: DeckSection
     overhang: DeckOverhangSection
   }
   influence_lines: {
     positive: DeckILView
     negative: DeckILView
+    shear: DeckILView
   }
   unit_effort: string
   unit_line: string
+  unit_shear: string
+  unit_shear_line: string
 }

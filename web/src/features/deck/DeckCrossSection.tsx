@@ -4,9 +4,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Arrow, Layer, Line, Rect, Stage, Text } from 'react-konva'
 import type { AxlePosition, DeckGeometry } from '@/api/types'
 
+interface PointLoad {
+  x: number
+  P: number
+  label: string
+}
+
 interface Props {
   geometry: DeckGeometry
   wheels: AxlePosition[]
+  pointLoads?: PointLoad[]
   forceUnit: string
   lengthUnit: string
 }
@@ -15,7 +22,13 @@ const HEIGHT = 170
 const MARGIN = 40
 const DECK_Y = 96
 
-export function DeckCrossSection({ geometry, wheels, forceUnit, lengthUnit }: Props) {
+export function DeckCrossSection({
+  geometry,
+  wheels,
+  pointLoads = [],
+  forceUnit,
+  lengthUnit,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(720)
 
@@ -81,6 +94,31 @@ export function DeckCrossSection({ geometry, wheels, forceUnit, lengthUnit }: Pr
               text={`${w.load} ${forceUnit}`}
               fontSize={11}
               fill="#dc2626"
+            />
+          ))}
+
+          {/* Charges ponctuelles permanentes (barrière/glissière) en vert */}
+          {pointLoads.map((p, i) => (
+            <Arrow
+              key={`pl${i}`}
+              points={[px(p.x), DECK_Y - 40, px(p.x), DECK_Y - 12]}
+              stroke="#059669"
+              fill="#059669"
+              strokeWidth={2}
+              pointerLength={8}
+              pointerWidth={7}
+            />
+          ))}
+          {pointLoads.map((p, i) => (
+            <Text
+              key={`plt${i}`}
+              x={px(p.x) - 34}
+              y={DECK_Y - 54}
+              width={68}
+              align="center"
+              text={`${p.label} ${p.P} ${forceUnit}`}
+              fontSize={10}
+              fill="#059669"
             />
           ))}
 
