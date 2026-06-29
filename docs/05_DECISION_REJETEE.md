@@ -90,7 +90,7 @@ unité. La formule de bande SI étant définie en mm, la conversion m→mm est i
 ## D11 — Réécrire le calcul en TypeScript (front 100 % statique) (rejeté)
 Pour la migration React, tentation de porter toute la mécanique (EF, Müller-Breslau, HL-93,
 bande équivalente) en TS → site statique sans backend, zéro install pour l'étudiant. Rejeté :
-~2000 lignes à reporter ET à re-tester (les 123 TU Python sont l'oracle), risque de
+~2000 lignes à reporter ET à re-tester (les TU Python sont l'oracle), risque de
 divergence de calcul, perte de la frontière nette calcul/présentation. Retenu : **le moteur
 Python reste la couche calcul**, exposé par FastAPI ; React = couche présentation typée qui
 appelle l'API. (Pyodide/WASM pour exécuter le Python en navigateur : écarté aussi — lourd,

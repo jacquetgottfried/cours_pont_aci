@@ -55,10 +55,13 @@ resultats/            # CSV historiques (majoritairement faux, voir 05) ; LIVE =
   AASHTO, formules de bande) ; le cœur `compute_influence_line` reste agnostique (cf. 04 R6/D7).
 - **La dalle réutilise le même moteur** : c'est une poutre continue TRANSVERSALE (appuis =
   longerons, extrémités libres = porte-à-faux). `deck.py` appelle `compute_influence_line`
-  avec des `supports` aux positions de longerons, puis applique la largeur de bande E.
+  (M et V) avec des `supports` aux positions de longerons, puis applique la largeur de bande
+  E. Charges : DC/DW répartis + barrière/glissière ponctuelles (DC) + charge roulante 1/2/3
+  voies (MPF éditables). Quatre sections : positif, négatif, effort tranchant, porte-à-faux.
 - **UI à onglets** (shadcn Tabs) : « Poutre longitudinale » et « Tablier (dalle) ».
   L'onglet Poutre a une **géométrie partagée** (travées, dx, grandeur, section) + deux
   **sous-onglets** : « Charge mobile HL-93 » (LI live, position critique, V avant/après
   coupure) et « Charges permanentes DC/DW » (damier ombré + enveloppes M et V). Le Tablier
-  donne la bande équivalente (coupe transversale, 3 sections). Konva pour les éditeurs,
-  Recharts pour les courbes. `SectionView` factorise éditeur + LI (overlay convoi OU zones).
+  donne la bande équivalente (coupe transversale, tableaux moments/tranchant + décomposition
+  DC + effet par voies, 3 LI transversales). Konva pour les éditeurs, Recharts pour les
+  courbes. `SectionView` factorise éditeur + LI (overlay convoi OU zones).
