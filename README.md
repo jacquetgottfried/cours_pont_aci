@@ -1,98 +1,154 @@
-## Ligne d'Influence
-Nous présentons le calcul de la ligne d'influence utilisant la méthode du Muller Breslaut.
-Le calcul matriciel des déplacements est utilisé.
+# Ponts à poutres — lignes d'influence & sollicitations de superstructure
 
-## Application (moteur + API + interface web)
+Calcul des **lignes d'influence** d'une poutre continue par la méthode de
+**Müller-Breslau**, mise en œuvre par la **méthode matricielle des déplacements**
+(éléments de portique 2D, 3 DDL/nœud), puis application aux sollicitations
+**AASHTO LRFD** : charges mobiles **HL-93**, charges permanentes **DC/DW**, et
+**dimensionnement de la dalle de tablier** par la méthode de la bande équivalente.
 
-Le calcul est désormais disponible comme **moteur générique paramétrable**, exposé par une
-**API** et une **interface web** légère (les notebooks restent à but pédagogique).
+Projet **pédagogique** (cours de pont) en 3 couches :
 
-### Installation
-```bash
-pip install -r requirements.txt
-```
+| Couche | Techno | Rôle |
+|---|---|---|
+| Moteur | Python + NumPy (`engine/`, `calcul_structure.py`) | tout le calcul, testé |
+| Backend | FastAPI + Pydantic (`backend/`) | adaptateur HTTP au-dessus du moteur |
+| Frontend | React + TypeScript + Vite (`web/`) | présentation seule, **aucun calcul en TS** |
 
-### Utilisation directe (Python)
-```python
-from engine import compute_influence_line
-res = compute_influence_line(spans=[15, 10, 15], quantity="R", target_x=0, dx=1.0)
-# res["x"], res["y"], res["y_nodes"], res["normalization"], res["meta"]
-```
-`quantity` : `"R"` (réaction), `"M"` (moment), `"V"` (effort tranchant). `target_x` doit
-tomber sur un nœud (et être un appui pour `"R"`).
-
-### Backend
-```bash
-uvicorn backend.main:app --reload
-```
-Documentation interactive : http://127.0.0.1:8000/docs · endpoint `POST /influence-line`.
-
-### Frontend
-Ouvrir `frontend/index.html` dans un navigateur (ou `python -m http.server` depuis
-`frontend/`), saisir la poutre et la grandeur, puis tracer la ligne d'influence.
-
-Sous Windows, `run.bat` (à la racine) installe les dépendances au besoin, démarre le
-backend et ouvre le frontend automatiquement.
-
-### Charges mobiles HL-93 (AASHTO LRFD, SI)
-Une fois la ligne d'influence tracée, on peut balader un **véhicule de référence** :
-- **camion de calcul** (35 / 145 / 145 kN, espacement arrière réglable 4,3–9,0 m) ou
-  **tandem** (110 / 110 kN à 1,2 m), avec **majoration dynamique IM = 33 %** ;
-- les essieux sont **matérialisés par des flèches** à leur position AASHTO exacte ;
-- un curseur déplace le véhicule avec l'**effet résultant en direct** (kN ou kN·m) ;
-- le **balayage automatique** trouve la position la plus défavorable (effet maximal).
-
-### Tests
-```bash
-pytest tests/
-```
-
-> ⚠️ Les CSV de `resultats/` issus des anciens notebooks sont en partie **erronés** (matrices
-> `LM` saisies à la main). Le moteur générique corrige ces erreurs ; seul `LIVE` était correct.
+La documentation de référence (architecture, contrat d'API, règles métier, décisions
+rejetées) est dans [docs/](docs/) — c'est la source de vérité du projet.
 
 ---
 
+## Installation & lancement
 
-Les notes de calcul sont visible dans : 
-- LIRA détaille le calcul de la ligne d'influence pour la réaction d'appui A. Voir fichier [LIRA.ipynb](LIRA.ipynb): 
+**Windows — tout en un** : `run.bat` installe les dépendances au besoin, puis démarre
+le backend (`:8000`) et le frontend (`:5173`) dans deux fenêtres.
 
-![alt text](./images/image.png)
+**Manuellement** :
 
+```bash
+# 1. Moteur + API
+pip install -r requirements.txt
+uvicorn backend.main:app --reload        # http://127.0.0.1:8000  (docs : /docs)
 
-- LIRB, ligne d'influence Réaction d'appui B, dans le fichier [LIRB.ipynb](LIRB.ipynb) :
+# 2. Interface web
+cd web
+npm install
+npm run dev                              # http://127.0.0.1:5173
+```
 
-![alt text](./images/image-4.png)
+L'URL de l'API utilisée par le front est configurable par `VITE_API_BASE`
+(défaut `http://127.0.0.1:8000`).
 
-- LIRC, ligne d'influence Reaction d'appui. Voir fichier [LIRC.ipynb](LIRC.ipynb) :
+## Utilisation directe (Python)
 
-![alt text](./images/image-5.png)
+```python
+from engine import compute_influence_line
 
-- LIMB détaille le calcul de la ligne
- d'influence pour le moment à l'appui B. Voir fichier [LIMB.ipynb](LIMB.ipynb):
+res = compute_influence_line(spans=[15, 10, 15], quantity="R", target_x=0, dx=1.0)
+# res["x"], res["y"], res["y_nodes"], res["normalization"], res["meta"]
+```
 
- ![alt text](./images/image-1.png)
+`quantity` : `"R"` (réaction), `"M"` (moment), `"V"` (effort tranchant). `target_x` doit
+tomber sur un nœud (et être un appui pour `"R"`). Le moteur est **agnostique aux unités** :
+les ordonnées sortent dans l'unité de longueur fournie.
 
-- LIMC, ligne d'influence du moment sur appui C. Voir fichier [LIMC.ipynb](LIMC.ipynb) :
+Autres entrées du moteur : `sweep_effect` (balayage HL-93), `distributed_effect` /
+`distributed_envelope` (DC/DW), `deck_design` / `deck_section_study` (tablier).
 
- ![alt text](./images/image-2.png)
+## Fonctionnalités de l'interface
 
-- LIME détaille le calcul de la ligne d'influence pour le moment interne en E. Voir fichier [LIME.ipynb](LIME.ipynb):
+### Onglet « Poutre longitudinale »
+Géométrie partagée (travées, discrétisation `dx`, grandeur, section étudiée), éditeur de
+poutre interactif, et deux sous-onglets :
 
-![alt text](./images/image-3.png)
+- **Charge mobile HL-93** — camion de calcul (35 / 145 / 145 kN, espacement arrière réglable
+  4,3–9,0 m) ou tandem (2 × 110 kN à 1,2 m), majoration dynamique **IM = 33 %**. Essieux
+  matérialisés à leur position AASHTO exacte, ligne d'influence live, **position critique**
+  trouvée par balayage, et efforts tranchants **avant / après** la coupure rendus séparément.
+- **Charges permanentes DC/DW** — effet `w·∫η dx`, chargement alterné (zones η>0 / η<0
+  ombrées) et **lignes d'enveloppe** de M et V le long de la poutre.
 
-- LIMF ligne d'influence moment en F, (milieu du seguement de poutre AB). Voir fichier [LIMF](LIMF.ipynb):
+### Onglet « Tablier (dalle) »
+La dalle est traitée comme une **poutre continue transversale** portée par les longerons,
+avec le même moteur :
 
-![alt text](./images/image_resikq.png)
+- dimensionnement live par la **bande équivalente AASHTO** (moment positif, moment négatif,
+  effort tranchant, porte-à-faux par statique) ;
+- décomposition DC (dalle réparti + barrière + glissière, appliquées aux **deux rives**), DW,
+  et charge roulante pour **1 / 2 / 3 voies** chargées (facteurs de présence multiple
+  éditables), combinaison **Strength I** à facteurs éditables ;
+- panneau **« Étude d'une section »** : l'utilisateur choisit une section transversale et
+  obtient le **moment et l'effort tranchant** à cet endroit (2 lignes d'influence, roues au
+  placement critique, bascule « Roues M / Roues V »).
 
-- LIVE détaille le calcul de la ligne d'influence pour l'éffort tranchant en E. Voir fichier [LIVE](LIVE.ipynb):
+### Unités
+Bascule **SI ↔ US** : les deux jeux de valeurs HL-93 **officiels** de l'AASHTO sont stockés
+(jamais convertis numériquement — cf. `docs/05`), ainsi que les deux familles de formules de
+bande équivalente.
 
-![alt text](./images/image-8.png)
+## Tests
 
-- LIVF, ligne d'influence effort tranchant au point F (milieu de la portion de poutre (AB)). Voir fichier [LIVF](LIVF.ipynb):
+```bash
+pytest tests/                # 157 tests — moteur + API
+cd web && npm run test       # 19 tests Vitest — contrat typé & helpers
+cd web && npm run typecheck  # tsc -b
+cd web && npm run lint       # oxlint
+```
 
-![alt text](./images/image-6.png)
+Les tests valident des **invariants analytiques exacts** (somme des LI de réaction = 1 en
+tout point, LI nulle aux appuis, saut de valeur unitaire pour `V`, saut de pente unitaire
+pour `M`, `w·L²/8` à mi-travée, `Mu = Σγ·M`…) et **jamais** les CSV historiques.
 
+> ⚠️ Les CSV de [resultats/](resultats/), issus des anciens notebooks, sont en partie
+> **erronés** (matrices `LM` saisies à la main). Le moteur générique corrige ces erreurs ;
+> seul `LIVE_resultats.csv` était correct.
 
+---
 
-Les resultats des lignes d'influence sont à consulter dans le dosser ./resultat
+## Notes de calcul (notebooks pédagogiques)
 
+Les notebooks historiques sont conservés dans [legacy/](legacy/) à titre **pédagogique
+uniquement** — ils ne servent plus de moteur de calcul.
+
+- **LIRA** — ligne d'influence de la réaction d'appui A : [legacy/LIRA.ipynb](legacy/LIRA.ipynb)
+
+![LIRA](./images/image.png)
+
+- **LIRB** — réaction d'appui B : [legacy/LIRB.ipynb](legacy/LIRB.ipynb)
+
+![LIRB](./images/image-4.png)
+
+- **LIRC** — réaction d'appui C : [legacy/LIRC.ipynb](legacy/LIRC.ipynb)
+
+![LIRC](./images/image-5.png)
+
+- **LIMB** — moment à l'appui B : [legacy/LIMB.ipynb](legacy/LIMB.ipynb)
+
+![LIMB](./images/image-1.png)
+
+- **LIMC** — moment sur appui C : [legacy/LIMC.ipynb](legacy/LIMC.ipynb)
+
+![LIMC](./images/image-2.png)
+
+- **LIME** — moment interne en E : [legacy/LIME.ipynb](legacy/LIME.ipynb)
+
+![LIME](./images/image-3.png)
+
+- **LIMF** — moment en F (milieu de la travée AB) : [legacy/LIMF.ipynb](legacy/LIMF.ipynb)
+
+![LIMF](./images/image_resikq.png)
+
+- **LIVE** — effort tranchant en E : [legacy/LIVE.ipynb](legacy/LIVE.ipynb)
+
+![LIVE](./images/image-8.png)
+
+- **LIVF** — effort tranchant en F (milieu de la travée AB) : [legacy/LIVF.ipynb](legacy/LIVF.ipynb)
+
+![LIVF](./images/image-6.png)
+
+Également dans [legacy/](legacy/) : `LIVB.ipynb`, `LIVC.ipynb`, `application.ipynb` et
+`application_poutre_continue_discretise.ipynb`.
+
+Convention de nommage `LI<grandeur><point>` : `LIR*` réaction, `LIM*` moment, `LIV*` effort
+tranchant ; A/B/C sont des appuis, E/F des points intérieurs.
