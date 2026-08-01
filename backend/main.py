@@ -22,6 +22,7 @@ from engine import (  # noqa: E402
     axle_layout,
     compute_influence_line,
     deck_design,
+    deck_section_study,
     design_wheel,
     distributed_effect,
     distributed_envelope,
@@ -33,6 +34,8 @@ from engine import (  # noqa: E402
 from .schemas import (  # noqa: E402
     DeckDesignRequest,
     DeckDesignResponse,
+    DeckSectionStudyRequest,
+    DeckSectionStudyResponse,
     DistributedEffectRequest,
     DistributedEffectResponse,
     DistributedEnvelopeResponse,
@@ -201,6 +204,45 @@ def deck_design_route(req: DeckDesignRequest):
             spacing=req.spacing,
             overhang=req.overhang,
             dx=req.dx,
+            w_dc=req.w_dc,
+            w_dw=req.w_dw,
+            unit_system=req.unit_system,
+            gamma_dc=req.gamma_dc,
+            gamma_dw=req.gamma_dw,
+            gamma_ll=req.gamma_ll,
+            mpf1=req.mpf1,
+            mpf2=req.mpf2,
+            mpf3=req.mpf3,
+            p_barrier=req.p_barrier,
+            x_barrier=req.x_barrier,
+            p_rail=req.p_rail,
+            x_rail=req.x_rail,
+            impact=req.impact,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
+
+
+@app.post("/deck-section-study", response_model=DeckSectionStudyResponse)
+def deck_section_study_route(req: DeckSectionStudyRequest):
+    """Étude d'une section transversale CHOISIE : moment ET effort tranchant à target_x.
+
+    Renvoie, pour chacune des deux grandeurs, la ligne d'influence, les effets
+    permanents (DC réparti + barrière/glissière, DW — chargement complet), le détail
+    par 1/2/3 voies chargées avec les roues au placement critique DE CHAQUE CAS et la
+    combinaison Strength I par cas. Le type de bande E est inféré (négatif au droit
+    d'un longeron, positif ailleurs ; toujours négatif pour V). Charges permanentes
+    nulles autorisées. Erreurs métier (target hors nœud, extrémité libre, mécanisme
+    ≥ 2 DDL) renvoyées en HTTP 400.
+    """
+    try:
+        result = deck_section_study(
+            n_girders=req.n_girders,
+            spacing=req.spacing,
+            overhang=req.overhang,
+            dx=req.dx,
+            target_x=req.target_x,
             w_dc=req.w_dc,
             w_dw=req.w_dw,
             unit_system=req.unit_system,

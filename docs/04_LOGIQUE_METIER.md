@@ -127,9 +127,12 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
   - **DC/DW répartis** (poids dalle, revêtement) : `w·∫η` aux sections, `w·L²/2` au
     porte-à-faux ;
   - **Charges ponctuelles DC** *barrière* et *glissière* (charges linéiques le long du pont
-    → ponctuelles sur la bande transversale, intensités/positions propres) : effet `Σ P·η(x)`
-    en section (réutilise `interp`), `Σ P·X` (statique) au porte-à-faux. Détaillées
-    séparément (`M_DC_dist`, `M_DC_barrier`, `M_DC_rail`) pour la transparence.
+    → ponctuelles sur la bande transversale) : appliquées en **PAIRE SYMÉTRIQUE aux deux
+    rives** (`x` mesuré depuis CHAQUE bord, cf. `edge_point_loads` — validé : un pont
+    porte ses équipements de bord des deux côtés ; une seule charge si `x` tombe au
+    centre). Effet `Σ P·η(x)` en section (réutilise `interp`, cumul par nom),
+    `Σ P·X` (statique) au porte-à-faux — la charge miroir de l'autre rive n'y contribue
+    pas. Détaillées séparément (`M_DC_dist`, `M_DC_barrier`, `M_DC_rail`).
   - Le **pattern loading η⁺/η⁻** reste RÉSERVÉ à la charge roulante (R8) ; les permanentes
     ne sont jamais alternées.
 - **Effort tranchant (V) au longeron intérieur — validé** : section sur LI de V au droit du
@@ -144,3 +147,37 @@ liaison associée et qu'on impose un déplacement unitaire (réalisé ici par ch
   n'est jamais appelé avec `unit_system`. Invariants de validation : porte-à-faux
   `M = P·X·(1+IM)` exact ; charge ponctuelle `P·η` / `P·X` ; symétrie M⁻ ; linéarité en w et
   en P ; `M_LL = MPF·M_bande/E` par voie ; saut unitaire de V ; `Mu = Σ γ·M`.
+
+## R10 — Étude d'une section transversale CHOISIE par l'utilisateur (tablier) — validé
+- Extension pédagogique de R9 (`deck_section_study` / `POST /deck-section-study`) :
+  l'étudiant choisit la section `target_x` (nœud de la grille dx, hors extrémités) et
+  obtient le MOMENT et L'EFFORT TRANCHANT à cette section EN UN APPEL (2 LI).
+- **Inférence du type de bande E** (l'AASHTO ne définit E que pour M⁺/M⁻/porte-à-faux) :
+  `V` → bande NÉGATIVE (cohérent D14) ; `M` au droit d'un longeron (tol 1e-9) → bande
+  NÉGATIVE ; `M` ailleurs (baie OU porte-à-faux) → bande POSITIVE. Le type utilisé
+  (`strip_kind`) est renvoyé et affiché. La bande « overhang » n'est PAS applicable à une
+  section arbitraire (X y est une grandeur par charge, pas par section, cf. 05 D16).
+- **Extrême retenu par cas de voies : `governing` SIGNÉ** (pour M et V). Le signe
+  enseigne : en glissant la section de la mi-baie (M>0) vers un longeron (M<0),
+  l'étudiant voit le basculement. Cohérent avec la section tranchant de `deck_design`.
+- **Cas 1/2/3 voies COMPLETS** : chaque cas porte ses roues au placement critique
+  (`wheels`, propre à chaque grandeur : la position critique de M diffère de celle de V)
+  et sa combinaison `Mu_n = γ_DC·M_DC + γ_DW·M_DW + γ_LL·M_LL_n` (M_DC/M_DW ne dépendent
+  pas du nombre de voies). Tout est calculé en Python (jamais en TS). Le sélecteur 1/2/3
+  voies du front est une SÉLECTION DE VUE sur les cas déjà calculés (pas de recalcul).
+- **Roues sur la coupe transversale — validé** : la coupe matérialise les roues du cas
+  de voies sélectionné (flèches + charges), avec une bascule explicite « Roues M /
+  Roues V » car le placement critique DIFFÈRE entre les deux grandeurs (révision de
+  05 D16-a à la demande utilisateur : l'ambiguïté est levée par la bascule, pas en
+  masquant les roues).
+- **Charges permanentes OPTIONNELLES** pour l'étude (`w_dc = w_dw = 0` accepté : question
+  « effet des véhicules seuls » légitime, `Mu = γ_LL·M_LL`) ; `/deck-design` garde son
+  validateur « au moins une charge permanente » (un dimensionnement sans poids propre n'a
+  pas de sens).
+- **Section sur le porte-à-faux ou au longeron de rive** : mécanisme à 1 DDL → géré par
+  le mode cinématique (cf. 05) ; la LI de M sur console vérifie `η(x)=0` pour `x` côté
+  appuis (invariant). Le dimensionnement RÉEL du porte-à-faux reste la statique (R9/D9).
+- **Invariants de validation** (tests `test_deck_study.py`) : l'étude à `girders[1]`
+  REPRODUIT les sections négative et tranchant de `deck_design` ; à mi-baie, la section
+  positive ; `M_LL = MPF·M_strip/E` par cas ; `Mu` par cas ; roues du cas gouvernant =
+  roues de la vue d'IL.

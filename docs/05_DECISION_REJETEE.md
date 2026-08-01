@@ -129,3 +129,23 @@ peu pédagogique. Retenu : un **train de roues rigide** où les voies sont à en
 `LANE_WIDTH` (3.6 m / 12 ft) ; on balaye ce train d'un bloc (`sweep_effect`), ce qui optimise
 déjà sa position absolue sur la bande. Les roues hors bande ne contribuent pas (gérées
 nativement par `load_effect`). Une optimisation indépendante reste une évolution possible.
+
+## D16 — Étude d'une section choisie du tablier : variantes rejetées (cf. 04 R10)
+Quatre choix écartés en concevant le panneau « Étude d'une section » :
+- **(a) Roues vives sur la coupe transversale — RÉVISÉ (demande utilisateur)** :
+  initialement rejeté car, pour un même cas de voies, le placement critique des roues
+  DIFFÈRE entre M et V (chaque LI a son propre balayage) — afficher « les » roues sans
+  précision serait ambigu. Révision retenue : la coupe matérialise les roues du cas de
+  voies sélectionné AVEC une **bascule explicite « Roues M / Roues V »** (l'ambiguïté est
+  levée par l'étiquetage, et voir les roues bouger en basculant M↔V est pédagogique).
+  Les deux graphes de LI gardent chacun leurs roues au placement critique propre.
+- **(b) Rendre max ET min par cas de voies** : rejeté. Tableau doublé (déjà 2 grandeurs ×
+  3 cas) pour un gain faible. Retenu : le **`governing` SIGNÉ** — le signe montre le
+  basculement mi-baie/longeron.
+- **(c) Bande « overhang » (45+10X) pour une section arbitraire** : rejeté. `X` y est une
+  grandeur PAR CHARGE (bras de levier), pas par section — inapplicable à un `target_x`
+  quelconque. Retenu : bandes positive/négative seulement (inférence, 04 R10).
+- **(d) Recalcul live de l'étude** : rejeté. Le bouton « Calculer » est un geste
+  pédagogique (l'étudiant choisit PUIS calcule) et l'appel coûte 2 LI + 6 balayages ;
+  le résultat est invalidé dès qu'une entrée ou la section change. Le sélecteur 1/2/3
+  voies, lui, ne recalcule pas (sélection de vue sur les cas déjà renvoyés).

@@ -1,5 +1,6 @@
-// Orchestre l'onglet Tablier : état d'UI local, calcul délégué à /deck-design.
-import { useState } from 'react'
+// Orchestre l'onglet Tablier : état d'UI local, calcul délégué à /deck-design
+// (tableaux AASHTO live) et /deck-section-study (étude à la demande).
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -8,15 +9,39 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import type { DeckDesignRequest, UnitSystem } from '@/api/types'
-import { DECK_DEFAULTS, forceUnit, lengthUnit, stripUnit } from '@/lib/units'
+import type {
+  DeckDesignRequest,
+  DeckSectionStudyResponse,
+  UnitSystem,
+} from '@/api/types'
+import {
+  DECK_DEFAULTS,
+  deckStudyTargets,
+  defaultDeckStudyX,
+  forceUnit,
+  lengthUnit,
+  nearestTarget,
+  stripUnit,
+} from '@/lib/units'
 import { useDeckCatalog, useDeckDesign } from './useDeck'
 import { DeckControls } from './DeckControls'
 import { DeckCrossSection } from './DeckCrossSection'
-import { DeckILChart } from './DeckILChart'
 import { DeckResultsTable } from './DeckResultsTable'
+import { DeckStudyPanel, type LaneCount } from './DeckStudyPanel'
 
-type DeckSectionKey = 'positive' | 'negative' | 'shear'
+function initialStudyX(sys: UnitSystem): number {
+  const d = DECK_DEFAULTS[sys]
+  return defaultDeckStudyX(d.n, d.s, d.oh, d.dx)
+}
+
+/** Paire symétrique d'une charge de bord pour l'affichage (miroir du moteur). */
+function edgeLoadsDisplay(total: number, p: number, x: number, label: string) {
+  if (p <= 0) return []
+  const out = [{ x, P: p, label }]
+  const xMirror = total - x
+  if (Math.abs(xMirror - x) > 1e-9) out.push({ x: xMirror, P: p, label })
+  return out
+}
 
 function initialReq(sys: UnitSystem): DeckDesignRequest {
   const d = DECK_DEFAULTS[sys]
@@ -44,26 +69,44 @@ function initialReq(sys: UnitSystem): DeckDesignRequest {
 
 export function DeckPage() {
   const [req, setReq] = useState<DeckDesignRequest>(() => initialReq('SI'))
-  const [section, setSection] = useState<DeckSectionKey>('positive')
+  const [studyX, setStudyX] = useState<number>(() => initialStudyX('SI'))
+  // Résultat d'étude + cas de voies affiché : remontés ici pour que la coupe
+  // transversale matérialise les roues du cas choisi (bascule M/V ci-dessous).
+  const [study, setStudy] = useState<DeckSectionStudyResponse | null>(null)
+  const [nLanes, setNLanes] = useState<LaneCount>(1)
+  const [crossQ, setCrossQ] = useState<'moment' | 'shear'>('moment')
 
   const onChange = (patch: Partial<DeckDesignRequest>) =>
     setReq((r) => ({ ...r, ...patch }))
-  const onUnitSystem = (sys: UnitSystem) => setReq(initialReq(sys))
+  const onUnitSystem = (sys: UnitSystem) => {
+    // Pas de conversion des valeurs saisies (cf. doc 05 D6) : reset aux défauts.
+    setReq(initialReq(sys))
+    setStudyX(initialStudyX(sys))
+  }
+
+  // La section d'étude reste snappée sur la grille quand la géométrie change.
+  useEffect(() => {
+    const targets = deckStudyTargets(req.n_girders, req.spacing, req.overhang, req.dx)
+    if (targets.length === 0) return
+    setStudyX((x) => nearestTarget(targets, x))
+  }, [req.n_girders, req.spacing, req.overhang, req.dx])
+
+  // Le résultat d'étude devient obsolète dès qu'une entrée ou la section change.
+  // Changer le nombre de voies ou la bascule M/V n'invalide PAS (sélection de vue).
+  useEffect(() => {
+    setStudy(null)
+  }, [req, studyX])
 
   const catalog = useDeckCatalog(req.unit_system)
-  const valid =
-    req.n_girders >= 2 &&
-    req.spacing > 0 &&
-    req.overhang >= 0 &&
-    req.dx > 0 &&
-    (req.w_dc > 0 || req.w_dw > 0)
+  const geomValid =
+    req.n_girders >= 2 && req.spacing > 0 && req.overhang >= 0 && req.dx > 0
+  const valid = geomValid && (req.w_dc > 0 || req.w_dw > 0)
   const design = useDeckDesign(valid ? req : null)
 
   const lu = lengthUnit(req.unit_system)
   const fu = forceUnit(req.unit_system)
   const su = stripUnit(req.unit_system)
   const data = design.data
-  const il = data ? data.influence_lines[section] : null
 
   return (
     <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
@@ -98,32 +141,68 @@ export function DeckPage() {
       <div className="grid gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Coupe transversale</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Coupe transversale</CardTitle>
+              {study && (
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant={crossQ === 'moment' ? 'default' : 'outline'}
+                    onClick={() => setCrossQ('moment')}
+                  >
+                    Roues M
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={crossQ === 'shear' ? 'default' : 'outline'}
+                    onClick={() => setCrossQ('shear')}
+                  >
+                    Roues V
+                  </Button>
+                </div>
+              )}
+            </div>
             <CardDescription>
-              Longerons (rouge) · porte-à-faux (jaune) · roues HL-93 (cas{' '}
-              {section === 'positive'
-                ? 'positif'
-                : section === 'negative'
-                  ? 'négatif'
-                  : 'effort tranchant'}
-              )
+              Longerons (rouge) · porte-à-faux (jaune) · barrière/glissière aux deux
+              rives (vert) · repère de section (orange, glissable)
+              {study &&
+                ` · roues du cas ${nLanes} voie${nLanes > 1 ? 's' : ''} (placement critique ${
+                  crossQ === 'moment' ? 'du moment' : "de l'effort tranchant"
+                })`}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {data ? (
               <DeckCrossSection
                 geometry={data.geometry}
-                wheels={il?.wheels ?? []}
+                wheels={
+                  study?.[crossQ].live_lanes.find((c) => c.n_lanes === nLanes)
+                    ?.wheels ?? []
+                }
                 pointLoads={[
-                  ...(req.p_barrier > 0
-                    ? [{ x: req.x_barrier, P: req.p_barrier, label: 'Barr.' }]
-                    : []),
-                  ...(req.p_rail > 0
-                    ? [{ x: req.x_rail, P: req.p_rail, label: 'Gliss.' }]
-                    : []),
+                  ...edgeLoadsDisplay(
+                    data.geometry.total,
+                    req.p_barrier,
+                    req.x_barrier,
+                    'Barr.',
+                  ),
+                  ...edgeLoadsDisplay(
+                    data.geometry.total,
+                    req.p_rail,
+                    req.x_rail,
+                    'Gliss.',
+                  ),
                 ]}
                 forceUnit={fu}
                 lengthUnit={lu}
+                studyX={studyX}
+                snapTargets={deckStudyTargets(
+                  req.n_girders,
+                  req.spacing,
+                  req.overhang,
+                  req.dx,
+                )}
+                onStudyXChange={setStudyX}
               />
             ) : (
               <p className="text-sm text-muted-foreground">En attente de calcul.</p>
@@ -151,43 +230,16 @@ export function DeckPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle>Ligne d'influence transversale</CardTitle>
-              <div className="flex gap-1">
-                <Button
-                  size="sm"
-                  variant={section === 'positive' ? 'default' : 'outline'}
-                  onClick={() => setSection('positive')}
-                >
-                  Positif
-                </Button>
-                <Button
-                  size="sm"
-                  variant={section === 'negative' ? 'default' : 'outline'}
-                  onClick={() => setSection('negative')}
-                >
-                  Négatif
-                </Button>
-                <Button
-                  size="sm"
-                  variant={section === 'shear' ? 'default' : 'outline'}
-                  onClick={() => setSection('shear')}
-                >
-                  Eff. tranchant
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {il ? (
-              <DeckILChart il={il} lengthUnit={lu} quantity={section === 'shear' ? 'V' : 'M'} />
-            ) : (
-              <p className="text-sm text-muted-foreground">En attente de calcul.</p>
-            )}
-          </CardContent>
-        </Card>
+        <DeckStudyPanel
+          req={req}
+          studyX={studyX}
+          onStudyXChange={setStudyX}
+          disabled={!geomValid}
+          study={study}
+          onStudyChange={setStudy}
+          nLanes={nLanes}
+          onNLanesChange={setNLanes}
+        />
       </div>
     </div>
   )

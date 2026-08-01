@@ -22,8 +22,10 @@ Quatre sections de calcul :
 Charges prises en compte :
   - **DC/DW répartis** (poids dalle, revêtement) : effet `w·∫η`, en chargement COMPLET
     (`full`) — charges permanentes toujours présentes (cf. doc 04 R8) ;
-  - **Charges ponctuelles permanentes** (barrière, glissière), DC : effet `P·η` en section
-    (réutilise `interp`), `P·X` au porte-à-faux. Détaillées séparément (transparence) ;
+  - **Charges ponctuelles permanentes** (barrière, glissière), DC : appliquées en PAIRE
+    SYMÉTRIQUE aux deux rives (`x` de chaque bord, cf. `edge_point_loads`) ; effet `P·η`
+    en section (réutilise `interp`), `P·X` au porte-à-faux (la charge miroir n'y
+    contribue pas). Détaillées séparément (transparence) ;
   - **Charge roulante** : cas 1 / 2 / 3 voies chargées (train de roues à entraxe de voie
     `LANE_WIDTH`, balayé par `sweep_effect`), avec facteurs de présence multiple (MPF)
     ÉDITABLES (défauts 1.20 / 1.00 / 0.85). On retient l'effet positif, négatif ou
@@ -155,29 +157,50 @@ def point_load_effect(li_x, li_y, loads):
     """Effet de charges ponctuelles permanentes sur une LI : `effet = Σ P·η(x)`.
 
     `loads` : liste de {"name", "P", "x"} (P en force, x abscisse transversale). Renvoie
-    {name: P·η(x)} + "total". Effet par unité de largeur (bande unitaire), homogène à
-    M_DC réparti. Réutilise `interp` (roue hors bande -> ordonnée d'extrémité).
+    {name: Σ P·η(x)} + "total" — les effets sont CUMULÉS par nom (une paire symétrique
+    de barrières partage le nom "barrier"). Effet par unité de largeur (bande unitaire),
+    homogène à M_DC réparti. Réutilise `interp` (roue hors bande -> ordonnée d'extrémité).
     """
     out = {"total": 0.0}
     for ld in loads:
         e = ld["P"] * interp(li_x, li_y, ld["x"])
-        out[ld["name"]] = e
+        out[ld["name"]] = out.get(ld["name"], 0.0) + e
         out["total"] += e
     return out
+
+
+def edge_point_loads(geom, p_barrier, x_barrier, p_rail, x_rail):
+    """Charges ponctuelles de bord SYMÉTRIQUES (barrière, glissière) — DC.
+
+    Un pont porte ses équipements de bord aux DEUX rives : chaque charge d'intensité P
+    est appliquée à `x` du bord GAUCHE et, en miroir, à `total - x` du même bord (rive
+    droite). Une seule charge si les deux positions coïncident (centre). Les effets sont
+    ensuite CUMULÉS par nom ('barrier', 'rail') par `point_load_effect` /
+    `overhang_point_moment` — au porte-à-faux, la charge miroir ne contribue pas.
+    """
+    total = geom["total"]
+    loads = []
+    for name, p, x in (("barrier", p_barrier, x_barrier), ("rail", p_rail, x_rail)):
+        loads.append({"name": name, "P": p, "x": x})
+        x_mirror = total - x
+        if abs(x_mirror - x) > 1e-9:
+            loads.append({"name": name, "P": p, "x": x_mirror})
+    return loads
 
 
 def overhang_point_moment(geom, loads):
     """Moment statique des charges ponctuelles permanentes sur le porte-à-faux (`P·X`).
 
-    Seules les charges effectivement sur le porte-à-faux (x < longeron de rive) comptent.
-    Renvoie {name: P·X} + "total".
+    Seules les charges effectivement sur le porte-à-faux (x < longeron de rive) comptent
+    (la charge miroir de l'autre rive n'y contribue pas). Effets CUMULÉS par nom.
+    Renvoie {name: Σ P·X} + "total".
     """
     girder0 = geom["girders"][0]
     out = {"total": 0.0}
     for ld in loads:
         lever = girder0 - ld["x"]
         e = ld["P"] * lever if lever > 1e-9 else 0.0
-        out[ld["name"]] = e
+        out[ld["name"]] = out.get(ld["name"], 0.0) + e
         out["total"] += e
     return out
 
@@ -209,8 +232,9 @@ def live_lane_cases(li_x, li_y, wheel, mpf_list, unit_system, which, e_length, i
 
     `which` ∈ {'positive', 'negative', 'governing'} : retient le max, le min, ou le pire
     de max/min du balayage. `mpf_list = [mpf1, mpf2, mpf3]`. Renvoie
-    {cases: [{n_lanes, mpf, M_strip, M_LL}], governing: <cas dominant>, wheels: [...]}.
-    Le cas gouvernant est celui de plus grand |M_LL| (MPF appliqué).
+    {cases: [{n_lanes, mpf, M_strip, M_LL, wheels}], governing: <cas dominant>,
+    wheels: [...]}. Chaque cas porte SES roues au placement critique ; le top-level
+    `wheels` reste celui du cas gouvernant (plus grand |M_LL|, MPF appliqué).
     """
     cases = []
     gov = None
@@ -227,7 +251,13 @@ def live_lane_cases(li_x, li_y, wheel, mpf_list, unit_system, which, e_length, i
         m_strip = pick["value"]
         mpf = mpf_list[n - 1]
         m_ll = mpf * m_strip / e_length
-        case = {"n_lanes": n, "mpf": mpf, "M_strip": m_strip, "M_LL": m_ll}
+        case = {
+            "n_lanes": n,
+            "mpf": mpf,
+            "M_strip": m_strip,
+            "M_LL": m_ll,
+            "wheels": pick["axle_positions"],
+        }
         cases.append(case)
         if gov is None or abs(m_ll) > abs(gov["M_LL"]):
             gov = case
@@ -361,10 +391,7 @@ def deck_design(
     wheel = design_wheel(unit_system)
     mpf_list = [mpf1, mpf2, mpf3]
     girders = geom["girders"]
-    point_loads = [
-        {"name": "barrier", "P": p_barrier, "x": x_barrier},
-        {"name": "rail", "P": p_rail, "x": x_rail},
-    ]
+    point_loads = edge_point_loads(geom, p_barrier, x_barrier, p_rail, x_rail)
 
     def factored(m_dc, m_dw, m_ll):
         return gamma_dc * m_dc + gamma_dw * m_dw + gamma_ll * m_ll
@@ -436,6 +463,105 @@ def deck_design(
             "negative": il_neg,
             "shear": il_shear,
         },
+        "unit_effort": effect_unit(unit_system, "M"),
+        "unit_line": effect_unit_per_width(unit_system),
+        "unit_shear": effect_unit(unit_system, "V"),
+        "unit_shear_line": shear_unit_per_width(unit_system),
+    }
+
+
+# ----------------------------------------------------------------------------------
+# Étude d'une section choisie par l'utilisateur (M et V à target_x)
+# ----------------------------------------------------------------------------------
+def infer_strip_kind(geom, target_x, quantity, tol=1e-9):
+    """Type de bande E pour une section CHOISIE par l'utilisateur (extension de R9).
+
+    L'AASHTO ne définit E que pour les moments positif/négatif (et le porte-à-faux,
+    dont X est une grandeur par charge, pas par section). Règle retenue :
+    - `V` → bande NÉGATIVE (pas de formule de bande en cisaillement, cf. doc 05 D14) ;
+    - `M` au droit d'un longeron (tolérance `tol`) → bande NÉGATIVE ;
+    - `M` ailleurs (baie ou porte-à-faux) → bande POSITIVE.
+    """
+    if quantity == "V":
+        return "negative"
+    if any(abs(target_x - g) <= tol for g in geom["girders"]):
+        return "negative"
+    return "positive"
+
+
+def deck_section_study(
+    n_girders,
+    spacing,
+    overhang,
+    dx,
+    target_x,
+    w_dc,
+    w_dw,
+    unit_system,
+    gamma_dc=1.25,
+    gamma_dw=1.50,
+    gamma_ll=1.75,
+    mpf1=1.20,
+    mpf2=1.00,
+    mpf3=0.85,
+    p_barrier=0.0,
+    x_barrier=0.0,
+    p_rail=0.0,
+    x_rail=0.0,
+    impact=True,
+):
+    """Étude pédagogique d'une section transversale choisie : M ET V à `target_x`.
+
+    Pour chacune des deux grandeurs, calcule la ligne d'influence, l'effet des charges
+    permanentes (DC réparti + barrière/glissière, DW — chargement complet), et la charge
+    roulante pour 1/2/3 voies chargées avec, PAR CAS : les roues à leur placement
+    critique et la combinaison Strength I (`Mu_n = γ_DC·M_DC + γ_DW·M_DW + γ_LL·M_LL_n`,
+    M_DC/M_DW indépendants du nombre de voies). L'extrême retenu par cas est le
+    `governing` SIGNÉ (le signe enseigne : M>0 en baie, M<0 au longeron). Le type de
+    bande E est inféré par `infer_strip_kind` et renvoyé (`strip_kind`).
+
+    Contrairement à `deck_design`, les charges permanentes peuvent être toutes nulles
+    (étude « véhicules seuls »). Les erreurs moteur (target hors nœud, extrémité libre,
+    mécanisme ≥ 2 DDL) remontent en ValueError/RuntimeError (→ 400 côté API).
+    """
+    geom = deck_geometry(n_girders, spacing, overhang, dx)
+    wheel = design_wheel(unit_system)
+    mpf_list = [mpf1, mpf2, mpf3]
+    point_loads = edge_point_loads(geom, p_barrier, x_barrier, p_rail, x_rail)
+
+    def factored(m_dc, m_dw, m_ll):
+        return gamma_dc * m_dc + gamma_dw * m_dw + gamma_ll * m_ll
+
+    sections = {}
+    il_views = {}
+    for key, quantity in (("moment", "M"), ("shear", "V")):
+        strip_kind = infer_strip_kind(geom, target_x, quantity)
+        section, il = _il_section(
+            geom, target_x, quantity, "governing", strip_kind,
+            wheel, mpf_list, w_dc, w_dw, point_loads, unit_system, impact,
+        )
+        section["strip_kind"] = strip_kind
+        section["Mu"] = factored(section["M_DC"], section["M_DW"], section["M_LL"])
+        for case in section["live_lanes"]:
+            case["Mu"] = factored(section["M_DC"], section["M_DW"], case["M_LL"])
+        sections[key] = section
+        il_views[key] = il
+
+    return {
+        "geometry": geom,
+        "wheel": {k: wheel[k] for k in ("P", "gage", "edge_offset", "im")},
+        "factors": {
+            "gamma_dc": gamma_dc,
+            "gamma_dw": gamma_dw,
+            "gamma_ll": gamma_ll,
+            "mpf1": mpf1,
+            "mpf2": mpf2,
+            "mpf3": mpf3,
+        },
+        "target_x": float(target_x),
+        "moment": sections["moment"],
+        "shear": sections["shear"],
+        "influence_lines": il_views,
         "unit_effort": effect_unit(unit_system, "M"),
         "unit_line": effect_unit_per_width(unit_system),
         "unit_shear": effect_unit(unit_system, "V"),

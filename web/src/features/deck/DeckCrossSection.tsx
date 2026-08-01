@@ -1,8 +1,11 @@
-// Coupe transversale de la dalle (Konva) : longerons, porte-à-faux, roues placées.
-// Visualisation pure (pas de glissement) : reflète la géométrie + le cas de charge.
+// Coupe transversale de la dalle (Konva) : longerons, porte-à-faux, charges de bord
+// et repère de la section d'étude GLISSABLE (snap sur la grille dx). Présentation/
+// interaction pure : ne calcule rien, remonte `studyX` via onStudyXChange.
 import { useEffect, useRef, useState } from 'react'
-import { Arrow, Layer, Line, Rect, Stage, Text } from 'react-konva'
+import { Arrow, Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva'
+import type { KonvaEventObject } from 'konva/lib/Node'
 import type { AxlePosition, DeckGeometry } from '@/api/types'
+import { nearestTarget } from '@/lib/units'
 
 interface PointLoad {
   x: number
@@ -12,10 +15,14 @@ interface PointLoad {
 
 interface Props {
   geometry: DeckGeometry
-  wheels: AxlePosition[]
+  wheels?: AxlePosition[]
   pointLoads?: PointLoad[]
   forceUnit: string
   lengthUnit: string
+  /** Repère de section d'étude (glissable si onStudyXChange est fourni). */
+  studyX?: number
+  snapTargets?: number[]
+  onStudyXChange?: (x: number) => void
 }
 
 const HEIGHT = 170
@@ -24,10 +31,13 @@ const DECK_Y = 96
 
 export function DeckCrossSection({
   geometry,
-  wheels,
+  wheels = [],
   pointLoads = [],
   forceUnit,
   lengthUnit,
+  studyX,
+  snapTargets = [],
+  onStudyXChange,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(720)
@@ -45,6 +55,12 @@ export function DeckCrossSection({
   const plotW = Math.max(1, width - 2 * MARGIN)
   const scale = plotW / (total || 1)
   const px = (x: number) => MARGIN + x * scale
+  const physFromPx = (pxX: number) =>
+    nearestTarget(snapTargets, (pxX - MARGIN) / scale)
+
+  const handleDrag = (e: KonvaEventObject<DragEvent>) => {
+    onStudyXChange?.(physFromPx(e.target.x()))
+  }
 
   return (
     <div ref={wrapRef} className="w-full">
@@ -130,6 +146,36 @@ export function DeckCrossSection({
             fontSize={12}
             fill="#6b7280"
           />
+
+          {/* Repère de la section d'étude, glissable (snap sur la grille dx) */}
+          {studyX !== undefined && (
+            <Group
+              x={px(studyX)}
+              y={0}
+              draggable={onStudyXChange !== undefined}
+              dragBoundFunc={(pos) => ({
+                x: px(physFromPx(Math.max(MARGIN, Math.min(MARGIN + plotW, pos.x)))),
+                y: 0,
+              })}
+              onDragMove={handleDrag}
+            >
+              <Line
+                points={[0, 14, 0, DECK_Y + 46]}
+                stroke="#b45309"
+                strokeWidth={2}
+                dash={[5, 3]}
+              />
+              <Circle x={0} y={14} radius={7} fill="#b45309" />
+              <Text
+                x={6}
+                y={8}
+                text={`x = ${studyX.toFixed(2)} ${lengthUnit}`}
+                fontSize={12}
+                fontStyle="bold"
+                fill="#b45309"
+              />
+            </Group>
+          )}
         </Layer>
       </Stage>
     </div>

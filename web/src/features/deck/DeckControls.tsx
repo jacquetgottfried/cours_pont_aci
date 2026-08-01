@@ -127,8 +127,8 @@ export function DeckControls({ req, catalog, onChange, onUnitSystem }: Props) {
       <p className="text-sm font-medium">Charges ponctuelles DC (bord)</p>
       <p className="text-xs text-muted-foreground">
         Barrière et glissière : charges linéiques le long du pont → ponctuelles sur la
-        bande transversale (x depuis le bord). Effet `P·η` en section, `P·X` au
-        porte-à-faux.
+        bande transversale, appliquées en PAIRE symétrique aux deux rives (x depuis
+        chaque bord). Effet `P·η` en section, `P·X` au porte-à-faux.
       </p>
       <div className="grid grid-cols-2 gap-3">
         <NumField
@@ -140,7 +140,7 @@ export function DeckControls({ req, catalog, onChange, onUnitSystem }: Props) {
         />
         <NumField
           id="xb"
-          label={`Barrière x (${lu})`}
+          label={`Barrière x / bord (${lu})`}
           value={req.x_barrier}
           min={0}
           onChange={(x_barrier) => onChange({ x_barrier })}
@@ -154,7 +154,7 @@ export function DeckControls({ req, catalog, onChange, onUnitSystem }: Props) {
         />
         <NumField
           id="xr"
-          label={`Glissière x (${lu})`}
+          label={`Glissière x / bord (${lu})`}
           value={req.x_rail}
           min={0}
           onChange={(x_rail) => onChange({ x_rail })}

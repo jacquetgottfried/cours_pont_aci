@@ -7,7 +7,8 @@
 
 Base : `http://127.0.0.1:8000` · Documentation interactive : `/docs`.
 **CORS ouvert** (`allow_origins=["*"]`) : le front React de dev (`:5173`) appelle l'API
-en cross-origin. Aucune route n'a changé cette session (le front React réutilise l'existant).
+en cross-origin. Nouvelle route cette session : `POST /deck-section-study` (étude d'une
+section transversale choisie du tablier).
 
 ## GET /health — sonde de disponibilité
 - Payload : aucun.
@@ -15,7 +16,7 @@ en cross-origin. Aucune route n'a changé cette session (le front React réutili
 
 Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-envelope`,
 `POST /distributed-effect`, `POST /distributed-envelope`, `GET /deck-catalog`,
-`POST /deck-design`.
+`POST /deck-design`, `POST /deck-section-study`.
 
 ## POST /influence-line — calcule une ligne d'influence
 - Payload (JSON) :
@@ -179,8 +180,11 @@ Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-
   }
   ```
   Les charges ponctuelles `p_barrier`/`p_rail` (≥0, nulles par défaut) sont des charges
-  linéiques DC le long du pont, vues comme ponctuelles sur la bande transversale à
-  `x_barrier`/`x_rail` (≥0, depuis le bord).
+  linéiques DC le long du pont, vues comme ponctuelles sur la bande transversale et
+  appliquées en **PAIRE SYMÉTRIQUE aux deux rives** : à `x_barrier`/`x_rail` (≥0) de
+  CHAQUE bord (une seule charge si la position tombe au centre, cf. 04 R9).
+  `M_DC_barrier`/`M_DC_rail` cumulent les deux rives ; au porte-à-faux, seule la charge
+  de la rive étudiée contribue.
 - Réponse 200 :
   ```json
   {
@@ -215,3 +219,36 @@ Routes : `GET /health`, `POST /influence-line`, `GET /vehicles`, `POST /vehicle-
 - Erreurs : `400` (métier : `dx` hors grille, géométrie incohérente), `422` (deux charges
   réparties nulles, `n_girders<2`, facteur/MPF ≤ 0, charge ponctuelle/position < 0,
   `unit_system` invalide).
+
+## POST /deck-section-study — étude d'une section transversale choisie (M ET V)
+- Panneau pédagogique « Étude d'une section » : l'utilisateur choisit `target_x` ; la
+  route calcule le MOMENT et L'EFFORT TRANCHANT à cette section en un appel (cf. 04 R10).
+- Payload (JSON) : **tous les champs de `/deck-design`** + :
+  ```json
+  { "target_x": 4.6 }   // abscisse transversale de la section, ≥0, sur un nœud dx
+  ```
+  Particularité : `w_dc` et `w_dw` peuvent être TOUS DEUX nuls (étude « véhicules
+  seuls »), contrairement à `/deck-design`.
+- Réponse 200 :
+  ```json
+  {
+    "geometry": {...}, "wheel": {...}, "factors": {...}, "target_x": 4.6,
+    "moment": {                       // et "shear" de même forme
+      "M_DC": ..., "M_DC_dist": ..., "M_DC_barrier": ..., "M_DC_rail": ..., "M_DW": ...,
+      "M_LL": ..., "M_strip": ..., "E": ..., "E_length": ..., "Mu": ..., "target_x": 4.6,
+      "strip_kind": "positive",       // bande E utilisée : "positive" | "negative"
+      "live_lanes": [                 // cas 1/2/3 voies, chacun COMPLET :
+        {"n_lanes": 1, "mpf": 1.2, "M_strip": ..., "M_LL": ...,
+         "Mu": ...,                   // Strength I POUR CE CAS (γ·DC + γ·DW + γ·LL_n)
+         "wheels": [{"x", "load"}]}   // roues au placement critique DE CE CAS
+      ]
+    },
+    "shear": {... idem, extrême gouvernant signé de V ...},
+    "influence_lines": {"moment": {...DeckILView...}, "shear": {...x dédoublé au saut...}},
+    "unit_effort": "kN·m", "unit_line": "kN·m/m", "unit_shear": "kN", "unit_shear_line": "kN/m"
+  }
+  ```
+  Extrême retenu par cas de voies : `governing` SIGNÉ (M>0 en baie, M<0 au longeron).
+  Bande E inférée : négative si V ou si M au droit d'un longeron, positive sinon (04 R10).
+- Erreurs : `400` (métier : `target_x` hors grille dx, extrémité libre, mécanisme ≥ 2 DDL),
+  `422` (`target_x` manquant ou < 0, `unit_system` invalide, facteur/MPF ≤ 0).

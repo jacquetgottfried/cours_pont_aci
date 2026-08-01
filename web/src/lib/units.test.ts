@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  deckStudyTargets,
+  deckTotal,
+  defaultDeckStudyX,
   defaultTarget,
   effectUnit,
   lineUnit,
@@ -69,5 +72,27 @@ describe('unités tablier', () => {
   it('lineUnit : moment par unité de largeur', () => {
     expect(lineUnit('US')).toBe('kip·ft/ft')
     expect(lineUnit('SI')).toBe('kN·m/m')
+  })
+})
+
+describe('section d’étude du tablier', () => {
+  // Défauts SI : 6 longerons, S=2.4, porte-à-faux 1.0, dx=0.1 → largeur 14 m.
+  it('deckTotal : 2·overhang + (n-1)·S', () => {
+    expect(deckTotal(6, 2.4, 1.0)).toBeCloseTo(14)
+    expect(deckTotal(6, 8, 3.25)).toBeCloseTo(46.5)
+  })
+
+  it('deckStudyTargets : nœuds intérieurs seulement (extrémités exclues)', () => {
+    const t = deckStudyTargets(6, 2.4, 1.0, 0.1)
+    expect(t.length).toBe(139) // 140 pas − extrémité
+    expect(t[0]).toBeCloseTo(0.1)
+    expect(t[t.length - 1]).toBeCloseTo(13.9)
+    expect(t).not.toContain(0)
+    expect(deckStudyTargets(1, 2.4, 1.0, 0.1)).toEqual([]) // géométrie invalide
+  })
+
+  it('defaultDeckStudyX : mi-baie intérieure (longeron 1 + S/2), snappée sur dx', () => {
+    expect(defaultDeckStudyX(6, 2.4, 1.0, 0.1)).toBeCloseTo(4.6) // 3.4 + 1.2
+    expect(defaultDeckStudyX(6, 8, 3.25, 0.25)).toBeCloseTo(15.25) // 11.25 + 4
   })
 })

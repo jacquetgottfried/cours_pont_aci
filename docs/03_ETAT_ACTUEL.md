@@ -5,22 +5,24 @@
 
 # État actuel
 
-**Calcul en Python (stable, 134 TU) ; front React/TS (14 tests Vitest).**
+**Calcul en Python (stable, 157 TU) ; front React/TS (19 tests Vitest).**
 
 ## Couche calcul (Python — engine/ + backend FastAPI, CORS ouvert)
 - `compute_influence_line` (agnostique ; travée simple = mode cinématique du noyau de K)
   + `vehicle_loads` (HL-93) + `distributed_loads` (DC/DW) + `deck` (bande équiv. AASHTO).
-- `deck` étendu : 4 sections (positif, négatif, **effort tranchant** au longeron intérieur,
-  porte-à-faux) ; DC/DW répartis **+ barrière/glissière ponctuelles** (décomposées) ;
-  charge roulante **1/2/3 voies** (MPF éditables 1.20/1.00/0.85).
+- `deck` : 4 sections fixes + **étude d'une section CHOISIE** (`deck_section_study`,
+  cf. 04 R10) : M ET V à `target_x`, bande E inférée, cas 1/2/3 voies COMPLETS (roues +
+  Mu par cas). Barrière/glissière = **paires symétriques aux deux rives** (R9 amendé,
+  `edge_point_loads`) ; charges permanentes optionnelles pour l'étude.
 
 ## Front React `web/` (PRINCIPAL) — présentation pure, zéro calcul TS
-- **Onglet Poutre** (géométrie partagée + sous-onglets) : *Charge mobile HL-93* (éditeur
-  Konva, LI live, position critique, V avant/après coupure) ; *DC/DW* (damier, zones
-  ombrées, 2 enveloppes M et V, M⁻ aux appuis ◆ / M⁺ en travée ▲).
-- **Onglet Tablier** : `/deck-design` live ; coupe Konva (roues + barrière/glissière),
-  tableaux moments + effort tranchant + décomposition M_DC + effet par voies (MPF
-  transparents), 3 LI transversales (positif/négatif/tranchant).
+- **Onglet Poutre** : sous-onglets *HL-93* (éditeur Konva, LI live, position critique,
+  V avant/après coupure) et *DC/DW* (damier, zones ombrées, enveloppes M et V).
+- **Onglet Tablier** : `/deck-design` live (coupe + tableaux AASHTO fixes) + panneau
+  **« Étude d'une section »** : repère glissable ↔ champ x (snap dx), 1/2/3 voies,
+  « Calculer » → 2 LI (M et V) + tableau permanentes/vif/Mu-Vu par voies. La coupe
+  matérialise barrières/glissières aux DEUX rives et les **roues du cas choisi**
+  (bascule « Roues M / Roues V », le placement critique diffère entre grandeurs).
 
 ## Legacy & limites
 - `frontend/` (vanilla + Chart.js) + notebooks `legacy/` : référence jusqu'à parité React.
@@ -28,4 +30,4 @@
 - Reste à porter en React : enveloppe HL-93 (Plotly), exports CSV.
 
 ## Lancer
-- `run.bat` (backend `:8000` + front `:5173`) ; `pytest tests/` (134) ; `npm run test` (14).
+- `run.bat` (backend `:8000` + front `:5173`) ; `pytest tests/` (157) ; `npm run test` (19).

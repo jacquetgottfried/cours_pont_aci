@@ -1,7 +1,11 @@
 // Hooks d'état serveur du tablier (React Query) : fetch only.
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { deckCatalog, deckDesign } from '@/api/deck'
-import type { DeckDesignRequest, UnitSystem } from '@/api/types'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
+import { deckCatalog, deckDesign, deckSectionStudy } from '@/api/deck'
+import type {
+  DeckDesignRequest,
+  DeckSectionStudyRequest,
+  UnitSystem,
+} from '@/api/types'
 
 /** Roue de calcul (P, gage, recul) du système courant. */
 export function useDeckCatalog(unitSystem: UnitSystem) {
@@ -20,5 +24,12 @@ export function useDeckDesign(req: DeckDesignRequest | null) {
     enabled: req !== null,
     placeholderData: keepPreviousData,
     retry: false,
+  })
+}
+
+/** Action « Calculer » de l'étude de section (déclenchée par bouton, jamais live). */
+export function useDeckSectionStudy() {
+  return useMutation({
+    mutationFn: (req: DeckSectionStudyRequest) => deckSectionStudy(req),
   })
 }

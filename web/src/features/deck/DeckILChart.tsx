@@ -18,9 +18,11 @@ interface Props {
   il: DeckILView
   lengthUnit: string
   quantity?: 'M' | 'V'
+  /** Repère de la section d'étude (ligne orange pointillée « section »). */
+  targetX?: number
 }
 
-export function DeckILChart({ il, lengthUnit, quantity = 'M' }: Props) {
+export function DeckILChart({ il, lengthUnit, quantity = 'M', targetX }: Props) {
   const points = il.x.map((x, i) => ({ x, y: il.y[i] }))
   const etaLabel = `η ${quantity}`
 
@@ -44,6 +46,15 @@ export function DeckILChart({ il, lengthUnit, quantity = 'M' }: Props) {
           <ReferenceArea key={`z${i}`} x1={a} x2={b} fill="#059669" fillOpacity={0.08} />
         ))}
         <ReferenceLine y={0} stroke="#94a3b8" />
+        {targetX !== undefined && (
+          <ReferenceLine
+            x={targetX}
+            stroke="#b45309"
+            strokeWidth={2}
+            strokeDasharray="6 3"
+            label={{ value: 'section', fill: '#b45309', position: 'top', fontSize: 11 }}
+          />
+        )}
         {il.wheels.map((w, i) => (
           <ReferenceLine key={`w${i}`} x={w.x} stroke="#dc2626" strokeDasharray="3 2" />
         ))}

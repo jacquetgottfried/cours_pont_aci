@@ -227,3 +227,39 @@ export interface DeckDesignResponse {
   unit_shear: string
   unit_shear_line: string
 }
+
+// --- Étude d'une section transversale choisie (M et V à target_x) ---
+
+/** Comme /deck-design + la section d'étude ; charges permanentes nulles autorisées. */
+export interface DeckSectionStudyRequest extends DeckDesignRequest {
+  target_x: number
+}
+
+/** Cas de voies enrichi : combinaison Strength I et roues au placement critique du cas. */
+export interface DeckStudyLaneCase extends DeckLaneCase {
+  Mu: number
+  wheels: AxlePosition[]
+}
+
+export interface DeckStudySection extends Omit<DeckSection, 'live_lanes'> {
+  live_lanes: DeckStudyLaneCase[]
+  /** Type de bande E inféré : négative au droit d'un longeron (et pour V), positive sinon. */
+  strip_kind: 'positive' | 'negative'
+}
+
+export interface DeckSectionStudyResponse {
+  geometry: DeckGeometry
+  wheel: DeckDesignResponse['wheel']
+  factors: DeckDesignResponse['factors']
+  target_x: number
+  moment: DeckStudySection
+  shear: DeckStudySection
+  influence_lines: {
+    moment: DeckILView
+    shear: DeckILView
+  }
+  unit_effort: string
+  unit_line: string
+  unit_shear: string
+  unit_shear_line: string
+}

@@ -278,8 +278,12 @@ class DistributedEnvelopeResponse(BaseModel):
 # --------------------------------------------------------------------------- #
 # Dalle de tablier — méthode de la bande équivalente (AASHTO)
 # --------------------------------------------------------------------------- #
-class DeckDesignRequest(BaseModel):
-    """Paramètres du dimensionnement de la dalle (poutre transversale + bande)."""
+class DeckParamsBase(BaseModel):
+    """Paramètres communs de la dalle (géométrie, charges, facteurs).
+
+    Base partagée par `/deck-design` (qui exige au moins une charge permanente) et
+    `/deck-section-study` (qui accepte les charges permanentes nulles).
+    """
 
     n_girders: int = Field(6, ge=2, description="Nombre de longerons (appuis).")
     spacing: float = Field(..., gt=0, description="Entraxe des longerons S (m | ft).")
@@ -298,16 +302,26 @@ class DeckDesignRequest(BaseModel):
     mpf2: float = Field(1.00, gt=0, description="Présence multiple, 2 voies chargées.")
     mpf3: float = Field(0.85, gt=0, description="Présence multiple, 3 voies chargées.")
     p_barrier: float = Field(
-        0.0, ge=0, description="Charge ponctuelle barrière DC (kN | kip)."
+        0.0,
+        ge=0,
+        description=(
+            "Charge ponctuelle barrière DC (kN | kip), appliquée en PAIRE "
+            "symétrique aux deux rives."
+        ),
     )
     x_barrier: float = Field(
-        0.0, ge=0, description="Position transversale de la barrière (m | ft)."
+        0.0, ge=0, description="Distance de la barrière à CHAQUE bord (m | ft)."
     )
     p_rail: float = Field(
-        0.0, ge=0, description="Charge ponctuelle glissière DC (kN | kip)."
+        0.0,
+        ge=0,
+        description=(
+            "Charge ponctuelle glissière DC (kN | kip), appliquée en PAIRE "
+            "symétrique aux deux rives."
+        ),
     )
     x_rail: float = Field(
-        0.0, ge=0, description="Position transversale de la glissière (m | ft)."
+        0.0, ge=0, description="Distance de la glissière à CHAQUE bord (m | ft)."
     )
     impact: bool = Field(True, description="Majoration dynamique IM=33 %.")
     unit_system: str = Field(
@@ -323,6 +337,10 @@ class DeckDesignRequest(BaseModel):
             )
         return v
 
+
+class DeckDesignRequest(DeckParamsBase):
+    """Paramètres du dimensionnement de la dalle (poutre transversale + bande)."""
+
     @model_validator(mode="after")
     def _check_loads(self) -> "DeckDesignRequest":
         if self.w_dc <= 0 and self.w_dw <= 0:
@@ -330,6 +348,23 @@ class DeckDesignRequest(BaseModel):
                 "Au moins une des charges w_dc / w_dw doit être strictement positive."
             )
         return self
+
+
+class DeckSectionStudyRequest(DeckParamsBase):
+    """Étude d'une section transversale choisie par l'utilisateur (M ET V).
+
+    Contrairement à `/deck-design`, les charges permanentes peuvent être toutes
+    nulles (étude pédagogique « véhicules seuls »).
+    """
+
+    target_x: float = Field(
+        ...,
+        ge=0,
+        description=(
+            "Abscisse transversale de la section d'étude (m | ft). "
+            "Doit tomber sur un nœud de la grille dx, hors extrémités libres."
+        ),
+    )
 
 
 class DeckGeometry(BaseModel):
@@ -440,6 +475,51 @@ class DeckDesignResponse(BaseModel):
     factors: DeckFactors
     sections: DeckSections
     influence_lines: DeckILViews
+    unit_effort: str = Field(..., description="Unité de moment (kN·m | kip·ft).")
+    unit_line: str = Field(
+        ..., description="Unité de moment par largeur (kN·m/m | kip·ft/ft)."
+    )
+    unit_shear: str = Field(..., description="Unité d'effort tranchant (kN | kip).")
+    unit_shear_line: str = Field(
+        ..., description="Unité d'effort tranchant par largeur (kN/m | kip/ft)."
+    )
+
+
+class DeckStudyLaneCase(DeckLaneCase):
+    """Cas de voies de l'étude : ajoute la combinaison et les roues du cas."""
+
+    Mu: float = Field(
+        ..., description="Strength I pour CE cas de voies (γ·DC + γ·DW + γ·LL_n)."
+    )
+    wheels: List[AxlePosition] = Field(
+        ..., description="Roues au placement critique de ce cas de voies."
+    )
+
+
+class DeckStudySection(DeckSection):
+    """Section d'étude : détaille le type de bande et les cas de voies enrichis."""
+
+    live_lanes: List[DeckStudyLaneCase]
+    strip_kind: str = Field(
+        ..., description="Type de bande E utilisé : 'positive' | 'negative'."
+    )
+
+
+class DeckStudyILViews(BaseModel):
+    moment: DeckILView
+    shear: DeckILView
+
+
+class DeckSectionStudyResponse(BaseModel):
+    """Étude d'une section choisie : M ET V à target_x (2 LI, cas 1/2/3 voies)."""
+
+    geometry: DeckGeometry
+    wheel: DeckWheel
+    factors: DeckFactors
+    target_x: float
+    moment: DeckStudySection
+    shear: DeckStudySection
+    influence_lines: DeckStudyILViews
     unit_effort: str = Field(..., description="Unité de moment (kN·m | kip·ft).")
     unit_line: str = Field(
         ..., description="Unité de moment par largeur (kN·m/m | kip·ft/ft)."

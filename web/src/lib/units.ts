@@ -108,6 +108,40 @@ export function nearestTarget(targets: number[], x: number): number {
   )
 }
 
+/** Largeur totale de la dalle (miroir de deck_geometry, pour bornes/échelle UI). */
+export function deckTotal(n: number, s: number, oh: number): number {
+  return 2 * oh + (n - 1) * s
+}
+
+/**
+ * Nœuds INTÉRIEURS de la grille transversale dx (cibles de snap du repère d'étude).
+ * Les extrémités libres sont exclues : M/V n'y sont pas calculables (400 moteur).
+ */
+export function deckStudyTargets(
+  n: number,
+  s: number,
+  oh: number,
+  dx: number,
+): number[] {
+  if (n < 2 || s <= 0 || oh < 0 || dx <= 0) return []
+  const total = deckTotal(n, s, oh)
+  const count = Math.round(total / dx)
+  return Array.from({ length: count - 1 }, (_, i) => (i + 1) * dx)
+}
+
+/** Section d'étude par défaut : mi-baie intérieure (longeron 1 + S/2), snappée sur dx. */
+export function defaultDeckStudyX(
+  n: number,
+  s: number,
+  oh: number,
+  dx: number,
+): number {
+  const targets = deckStudyTargets(n, s, oh, dx)
+  if (targets.length === 0) return 0
+  const bayMid = oh + s + s / 2 // girders[1] + S/2
+  return nearestTarget(targets, bayMid)
+}
+
 /** Section par défaut « parlante » : 1er appui intérieur si possible, sinon le milieu. */
 export function defaultTarget(
   spans: number[],

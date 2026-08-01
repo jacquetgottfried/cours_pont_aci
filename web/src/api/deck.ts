@@ -4,6 +4,8 @@ import type {
   DeckCatalog,
   DeckDesignRequest,
   DeckDesignResponse,
+  DeckSectionStudyRequest,
+  DeckSectionStudyResponse,
   UnitSystem,
 } from './types'
 
@@ -15,4 +17,11 @@ export function deckCatalog(unitSystem: UnitSystem): Promise<DeckCatalog> {
 /** Dimensionnement de la dalle par la méthode de la bande équivalente. */
 export function deckDesign(req: DeckDesignRequest): Promise<DeckDesignResponse> {
   return postJSON<DeckDesignResponse>('/deck-design', req)
+}
+
+/** Étude d'une section transversale choisie : M et V à target_x, cas 1/2/3 voies. */
+export function deckSectionStudy(
+  req: DeckSectionStudyRequest,
+): Promise<DeckSectionStudyResponse> {
+  return postJSON<DeckSectionStudyResponse>('/deck-section-study', req)
 }
