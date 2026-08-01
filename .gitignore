@@ -3,3 +3,4 @@ tests/
 .claude/
 .env/
 engine/__pycache__/
+CLAUDE.md
