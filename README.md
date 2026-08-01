@@ -19,19 +19,51 @@ rejetées) est dans [docs/](docs/) — c'est la source de vérité du projet.
 
 ---
 
-## Installation & lancement
+## Installation (Windows) — pour commencer
 
-**Windows — tout en un** : `run.bat` installe les dépendances au besoin, puis démarre
-le backend (`:8000`) et le frontend (`:5173`) dans deux fenêtres.
+Deux fichiers à double-cliquer, dans cet ordre. Aucune connaissance technique requise.
 
-**Manuellement** :
+| | Fichier | Quand |
+|---|---|---|
+| 1 | **`INSTALLERMOI.bat`** | **une seule fois**, à la première utilisation |
+| 2 | `run.bat` | à chaque fois que vous voulez utiliser l'application |
+
+### 1. `INSTALLERMOI.bat` — installe tout
+
+Double-cliquez dessus et laissez faire (quelques minutes, **connexion internet
+nécessaire**). Le script :
+
+1. vérifie que **Python ≥ 3.10** est présent (sinon il propose de l'installer, ou vous
+   donne le lien) ;
+2. vérifie que **Node.js** est présent (idem — c'est lui qui affiche l'interface) ;
+3. crée un environnement Python isolé `.venv/` (rien n'est modifié ailleurs sur votre
+   PC) ;
+4. installe les dépendances de calcul (`numpy`, `fastapi`, …) ;
+5. installe les dépendances de l'interface web (`npm install`) ;
+6. vérifie que le moteur répond et lance la suite de tests.
+
+Si un outil manquait et vient d'être installé, le script vous demande de **fermer la
+fenêtre et de le relancer** : c'est normal, Windows doit rafraîchir ses variables
+d'environnement. En cas d'erreur, le message affiché indique quoi faire.
+
+### 2. `run.bat` — lance l'application
+
+Ouvre deux fenêtres (backend + interface). Ouvrez ensuite dans votre navigateur :
+
+- **http://127.0.0.1:5173** — l'interface ;
+- http://127.0.0.1:8000/docs — la documentation interactive de l'API.
+
+Pour arrêter : fermez les deux fenêtres.
+
+### Installation manuelle (autres systèmes, ou si vous préférez la ligne de commande)
 
 ```bash
 # 1. Moteur + API
+python -m venv .venv                     # optionnel mais recommandé
 pip install -r requirements.txt
 uvicorn backend.main:app --reload        # http://127.0.0.1:8000  (docs : /docs)
 
-# 2. Interface web
+# 2. Interface web  (Node.js >= 20)
 cd web
 npm install
 npm run dev                              # http://127.0.0.1:5173
@@ -95,6 +127,10 @@ cd web && npm run test       # 19 tests Vitest — contrat typé & helpers
 cd web && npm run typecheck  # tsc -b
 cd web && npm run lint       # oxlint
 ```
+
+Sous Windows, après `INSTALLERMOI.bat`, la commande exacte est
+`.venv\Scripts\python -m pytest tests/` (le script l'exécute déjà pour vous en fin
+d'installation).
 
 Les tests valident des **invariants analytiques exacts** (somme des LI de réaction = 1 en
 tout point, LI nulle aux appuis, saut de valeur unitaire pour `V`, saut de pente unitaire
